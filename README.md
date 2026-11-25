@@ -22,6 +22,17 @@ Mixed reality prototype for the Terra discipline. Open the page in the Quest 3 b
 | Aqua | Jet | Breaker | Geyser | Riptide | Surge | Frost Needle |
 | Aero | Air Bullet | Gust | Updraft | Air Blade | Shockwave | Void |
 
+**Grip.** Reach an open hand at something (a ring shows what you would take), close your fist to hold it, open your hand to let go.
+
+| Discipline | Grip | What it does |
+|---|---|---|
+| Aero | Telekinesis | Holds any object you have a clear line to. It follows your hand; push your arm out to send it further. Let go mid-swing to throw. Close your other fist to crush it. |
+| Aqua | Puppetry | Holds an echo by the water in it, even through walls. Drag it into furniture or another echo to slam it, or close your other fist to wring it. |
+| Terra | Unearth | Holds stone and steel. Reach at bare floor and it tears out a fresh boulder to throw. |
+| Pyro | Fireball | Keep a raised fist closed to grow a fireball in it, then punch to throw. It explodes on impact. |
+
+**Objects.** Each round scatters crates, a powder keg, stone blocks and a steel ball on the floor. They fall, bounce off the real room and hurt any echo they hit at speed. Every move pushes them: Gust flings them, lifts and rings toss them, Rampart bulldozes them, Void drags them together. Fire lights crates (they burn away) and sets off the keg, which blasts everything nearby and can chain.
+
 **Twin casts.** Make the same move with both hands together and it comes out bigger and one point harder.
 
 **Echoes take two hits, and each discipline marks them differently:**
@@ -45,9 +56,9 @@ Mixed reality prototype for the Terra discipline. Open the page in the Quest 3 b
 
 **The room is solid.** Anything that flies stops at real walls and furniture (Air Bullet ricochets twice, Ferro Disc three times, Breaker rolls through). Lightning stops at the first surface. Columns, ground rings and Fault Line come up from the floor, so they reach behind cover. Gust, Flame Burst and Void need a clear line.
 
-Controllers work as a fallback: trigger punches at what you point at (or senses), grip changes discipline.
+Controllers work as a fallback: trigger punches at what you point at (or senses), grip changes discipline. Holds need hand tracking.
 
-On a phone or desktop the page runs a preview room: pick a discipline and a move, then tap the room.
+On a phone or desktop the page runs a preview room: pick a discipline and a move, then tap the room. For the grip move, press and drag, and release to throw; C or the Squeeze button is the other fist.
 
 No build step. `index.html`, `main.js` and a vendored copy of three.js. Serve over HTTPS (GitHub Pages works) because WebXR requires it.
 

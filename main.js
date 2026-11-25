@@ -9,6 +9,12 @@
 //   AQUA     raised palm, held      Jet          Breaker      Geyser   Riptide    Surge                   Frost Needle
 //   AERO     clap                   Air Bullet   Gust         Updraft  Air Blade  Shockwave               Void
 //
+// GRIP (close an open hand while reaching at something, open it to let go):
+//   AERO  Telekinesis  hold and throw any object you can see; close the other fist to crush it
+//   AQUA  Puppetry     hold an echo by the water in it, through walls; slam it around, or wring it with the other fist
+//   TERRA Unearth      hold stone and steel, or reach at the floor to tear out a fresh boulder
+//   PYRO  Fireball     keep a raised fist closed to grow a fireball, then punch to throw it
+//
 // Both hands making the same move together cast a stronger "twin" version.
 //
 // Echoes take two hits, and the disciplines leave different marks on them:
@@ -56,7 +62,7 @@ const ELEMENTS = {
   aero:  { label: 'AERO',  sense: 'Draft Sense',  color: new THREE.Color(0xdff9ff) },
 };
 const ELEMENT_ORDER = ['pyro', 'aqua', 'terra', 'aero'];
-const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point'];
+const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip'];
 
 // What each verb does per discipline. kind picks the behaviour, the rest are its numbers.
 const MOVES = {
@@ -67,6 +73,7 @@ const MOVES = {
     sweep: { name: 'Fire Arc',    kind: 'bolt',   speed: 6,  radius: 0.5, shape: 'crescent', size: 0.5, pierce: true, life: 1.2 },
     slam:  { name: 'Eruption',    kind: 'ring',   maxR: 2.2, height: 1.2 },
     point: { name: 'Volt',        kind: 'beam',   range: 8, chain: 2, volt: true },
+    grip:  { name: 'Fireball',    kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
   },
   aqua: {
     punch: { name: 'Jet',         kind: 'bolt',   speed: 12, radius: 0.18, shape: 'jet', pierce: true },
@@ -75,6 +82,7 @@ const MOVES = {
     sweep: { name: 'Riptide',     kind: 'bolt',   speed: 5,  radius: 0.22, shape: 'crescent', size: 0.16, pierce: true, homing: 7, life: 2.6 },
     slam:  { name: 'Surge',       kind: 'ring',   maxR: 2.6, height: 0.9, launch: true },
     point: { name: 'Frost Needle', kind: 'bolt',  speed: 14, radius: 0.2, shape: 'shard', freeze: true },
+    grip:  { name: 'Puppetry',    kind: 'grip' },
   },
   terra: {
     punch: { name: 'Stone Shot',  kind: 'bolt',   speed: 8,  radius: 0.28, shape: 'rock', gravity: 2.5 },
@@ -83,6 +91,7 @@ const MOVES = {
     sweep: { name: 'Rampart',     kind: 'wall',   ram: 2.5, width: 1.6, height: 1.4 },
     slam:  { name: 'Fault Line',  kind: 'fault',  length: 4.5 },
     point: { name: 'Ferro Disc',  kind: 'bolt',   speed: 10, radius: 0.25, shape: 'disc', bounces: 3, pierce: true, life: 2.5 },
+    grip:  { name: 'Unearth',     kind: 'grip' },
   },
   aero: {
     punch: { name: 'Air Bullet',  kind: 'bolt',   speed: 16, radius: 0.2, shape: 'orb', size: 0.03, bounces: 2 },
@@ -91,6 +100,7 @@ const MOVES = {
     sweep: { name: 'Air Blade',   kind: 'bolt',   speed: 11, radius: 0.4, shape: 'crescent', size: 0.4, pierce: true },
     slam:  { name: 'Shockwave',   kind: 'ring',   maxR: 3, height: 2 },
     point: { name: 'Void',        kind: 'void',   radius: 1.3, range: 6 },
+    grip:  { name: 'Telekinesis', kind: 'grip' },
   },
 };
 
@@ -505,6 +515,7 @@ function scatterEchoes() {
     e.group.visible = false;
   }
   downCount = 0;
+  scatterObjects();
   drawHud();
 }
 
@@ -589,7 +600,11 @@ function moveEcho(e, t, dt) {
   if (e.vel.x || e.vel.z) {                         // shoved: slide until the room or drag stops it
     _step.set(e.vel.x * dt, 0, e.vel.z * dt);
     _next.copy(e.home).add(_step).addScaledVector(_step.normalize(), 0.1);
-    if (collide(e.home, _next)) { e.vel.x = e.vel.z = 0; }
+    if (collide(e.home, _next)) {
+      const fast = Math.hypot(e.vel.x, e.vel.z) > 2.5;
+      e.vel.x = e.vel.z = 0;
+      if (fast) { hudNote = 'wall slam'; hit(e, 'terra', t, ZERO, { damage: 1 }); }    // thrown into the room itself
+    }
     else {
       e.home.x += e.vel.x * dt; e.home.z += e.vel.z * dt;
       const k = Math.max(1 - 4 * dt, 0);
@@ -738,28 +753,35 @@ function energyMat(key, o = {}) {
 }
 
 // Solid rock: opaque, flat shaded from the surface itself, with faint amber seams.
-function stoneMat(metal = false) {
+// pal swaps the rock colours for something else (wood, painted metal): { dark, light, seam, amt, grain }
+function stoneMat(metal = false, pal = null) {
   return new THREE.ShaderMaterial({
-    uniforms: { uMetal: { value: metal ? 1 : 0 } },
+    uniforms: {
+      uMetal: { value: metal ? 1 : 0 },
+      uDark: { value: new THREE.Color(pal ? pal.dark : 0x332b21) }, uLight: { value: new THREE.Color(pal ? pal.light : 0x8f7a5c) },
+      uSeam: { value: new THREE.Color(pal ? pal.seam : 0xe09e29) }, uSeamAmt: { value: pal ? pal.amt : 0.55 },
+      uGrain: { value: new THREE.Vector3(...(pal ? pal.grain : [7, 7, 7])) },
+    },
     side: THREE.DoubleSide,
     vertexShader: /* glsl */`
       varying vec3 vW; varying vec3 vObj;
       void main() { vObj = position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: /* glsl */`
       varying vec3 vW; varying vec3 vObj;
-      uniform float uMetal;
+      uniform float uMetal, uSeamAmt; uniform vec3 uDark, uLight, uSeam, uGrain;
       ${NOISE_GLSL}
       void main() {
         vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
         if (dot(n, cameraPosition - vW) < 0.0) n = -n;
         float light = 0.32 + 0.68 * max(dot(n, normalize(vec3(0.35, 1.0, 0.45))), 0.0);
-        float grain = fbm(vObj * 7.0);
-        vec3 rock = mix(vec3(0.20, 0.17, 0.13), vec3(0.56, 0.48, 0.36), grain) * light;
+        float grain = fbm(vObj * uGrain);
+        vec3 g22 = vec3(0.4545);                       // uniforms arrive in linear light; this shader writes display values
+        vec3 rock = mix(pow(uDark, g22), pow(uLight, g22), grain) * light;
         float seam = 1.0 - smoothstep(0.0, 0.035, abs(vnoise(vObj * 5.0) - 0.5));
         vec3 L = normalize(vec3(0.35, 1.0, 0.45)), V = normalize(cameraPosition - vW);
         float spec = pow(max(dot(reflect(-L, n), V), 0.0), 18.0) + 0.35 * pow(1.0 - max(dot(n, V), 0.0), 3.0);
         vec3 steel = vec3(0.42, 0.45, 0.5) * (0.35 + 0.65 * light) * (0.85 + 0.3 * grain) + vec3(0.95, 0.97, 1.0) * spec;
-        gl_FragColor = vec4(mix(rock + vec3(0.88, 0.62, 0.16) * seam * 0.55, steel, uMetal), 1.0);
+        gl_FragColor = vec4(mix(mix(rock, pow(uSeam, g22), seam * uSeamAmt), steel, uMetal), 1.0);
       }`,
   });
 }
@@ -985,13 +1007,14 @@ function castBolt(key, m, c) {
   }
   vel.multiplyScalar(m.speed);
   const mesh = boltMesh(key, m, color);
-  mesh.scale.setScalar(m.power || 1);
+  mesh.scale.setScalar((m.power || 1) * (c.scale || 1));
   mesh.position.copy(pos);
   puff(key, pos, 10, 1.6, { dir: vel.clone().normalize(), spread: 0.7 });      // muzzle
   const prev = pos.clone();
   const dirN = new THREE.Vector3();
   const look = new THREE.Vector3();
-  const struck = new Set();
+  const struck = new Set(), knocked = new Set();
+  const stop = (point, t) => { if (m.blast) explode(point, key, m.blast, t, 1); return false; };
   let bounces = m.bounces || 0;
   const born = c.t, life = m.life || 1.8;
   addEffect([mesh], (t, dt) => {
@@ -1031,10 +1054,21 @@ function castBolt(key, m, c) {
       if (segmentDistance(e.group.position, prev, end || mesh.position) < m.radius) {
         struck.add(e);
         hit(e, key, t, dirN.copy(vel).normalize(), m);
-        if (!m.pierce) return false;
+        if (!m.pierce) return stop(e.group.position.clone(), t);
       }
     }
-    if (end) { impact(wall.point, wall.normal, key, t, m.shape === 'rock' ? 0.4 : 0.25); return false; }
+    for (const o of objects) {                      // loose objects get knocked, lit, or broken
+      if (o.dead || o.held || knocked.has(o)) continue;
+      if (segmentDistance(o.pos, prev, end || mesh.position) > o.def.r + 0.06) continue;
+      knocked.add(o);
+      dirN.copy(vel).normalize();
+      const push = Math.min(m.speed * 0.6, 7);
+      kick(o, dirN.x * push, 1.2, dirN.z * push);
+      if (key === 'pyro') ignite(o, t);
+      if (m.shape === 'rock' && o.kind === 'crate') destroyObject(o, t);
+      if (!m.pierce) { impact(o.pos, dirN.clone().negate(), key, t, 0.25); return stop(o.pos.clone(), t); }
+    }
+    if (end) { impact(wall.point, wall.normal, key, t, m.shape === 'rock' ? 0.4 : 0.25); return stop(wall.point.clone(), t); }
 
     dirN.copy(vel).normalize();
     mesh.lookAt(look.copy(mesh.position).add(dirN));
@@ -1057,6 +1091,15 @@ function castCone(key, m, c) {
     if (!isLive(e, c.t)) continue;
     _to.copy(e.group.position).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, e.group.position)) hit(e, key, c.t, d, m);
+  }
+  for (const o of objects) {
+    if (o.dead || o.held) continue;
+    _to.copy(o.pos).sub(origin);
+    if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, o.pos)) {
+      const push = key === 'aero' ? 8 : 3;
+      kick(o, d.x * push, 1.5, d.z * push);
+      if (key === 'pyro') ignite(o, c.t);
+    }
   }
   // The blast itself: a cone of the element that rushes out and thins, plus loose matter thrown with it.
   const spread = Math.tan(m.angle);
@@ -1169,6 +1212,11 @@ function castColumn(key, m, c) {
         const p = e.group.position;
         if (Math.hypot(p.x - base.x, p.z - base.z) < m.radius && p.y < height + 0.1) hit(e, key, t, UP, m);
       }
+      for (const o of objects) {
+        if (o.dead || o.held || Math.hypot(o.pos.x - base.x, o.pos.z - base.z) > m.radius + o.def.r) continue;
+        kick(o, 0, 6, 0);
+        if (key === 'pyro') ignite(o, t);
+      }
     }
     return age < 1.1;
   });
@@ -1217,6 +1265,13 @@ function castRing(key, m, c) {
         struck.add(e);
         hit(e, key, t, _to.set(p.x - centre.x, 0.6, p.z - centre.z).normalize(), m);
       }
+    }
+    for (const o of objects) {
+      if (o.dead || o.held || struck.has(o) || Math.hypot(o.pos.x - centre.x, o.pos.z - centre.z) > r) continue;
+      struck.add(o);
+      _to.set(o.pos.x - centre.x, 0, o.pos.z - centre.z).normalize();
+      kick(o, _to.x * 2.5, 3.5, _to.z * 2.5);
+      if (key === 'pyro') ignite(o, t);
     }
     return k < 1;
   });
@@ -1284,6 +1339,13 @@ function castWall(key, m, c) {
           hit(e, key, t, d, m);
         }
       }
+      for (const o of objects) {
+        if (o.dead || o.held) continue;
+        _to.copy(o.pos).sub(wall.position);
+        if (Math.abs(_to.dot(d)) < 0.35 + step && Math.abs(_to.dot(right)) < m.width / 2 && o.pos.y < m.height) {
+          o.vel.x = d.x * 4.5; o.vel.z = d.z * 4.5; o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false;
+        }
+      }
     }
     const sink = stoppedAt < 0 ? 0 : Math.min((t - stoppedAt) / 0.3, 1);
     wall.scale.y = Math.max(rise * (1 - sink), 0.001);
@@ -1340,6 +1402,7 @@ function castFault(key, m, c) {
           const p = e.group.position;
           if (Math.hypot(p.x - s.at.x, p.z - s.at.z) < 0.35 && p.y < s.at.y + s.h + 0.15) hit(e, key, t, UP, m);
         }
+        for (const o of objects) if (!o.dead && !o.held && Math.hypot(o.pos.x - s.at.x, o.pos.z - s.at.z) < 0.4) kick(o, 0, 7, 0);
       }
     });
     return t - born < total;
@@ -1473,6 +1536,11 @@ function castVoid(key, m, c) {
           e.restY = e.home.y; e.airborne = false; e.vel.set(0, 0, 0);
         }
       }
+      for (const o of objects) {
+        if (o.dead || o.held || o.pos.distanceTo(centre) > m.radius) continue;
+        o.rest = false;
+        o.vel.copy(centre).sub(o.pos).multiplyScalar(7);
+      }
       if (k >= 1) {
         popped = true;
         puff(key, centre, 50, 4.5, { life: 0.35 });
@@ -1511,12 +1579,331 @@ let hudNote = 'open palm toward you: pick';
 function cast(key, gesture, c) {
   let m = MOVES[key][gesture];
   if (!m) return;
+  if (m.kind === 'grip') return;                    // holds are driven by beginHold / updateHold, not cast here
   if (c.power > 1) m = empowered(key, m, c.power);
   lastCast = key;
   castSound[key]();
   hudNote = (c.power > 1 ? 'twin ' : '') + m.name.toLowerCase();
   drawHud();
   KIND[m.kind](key, m, c);
+}
+
+// ---------- objects: loose things in the room ----------
+// Simple bodies: a sphere each for collision, gravity, bounce off the real room.
+// Anything moving fast hurts the echo it runs into, so every shove and toss matters.
+const OBJ = {
+  crate: { r: 0.2,  mass: 1,   bounce: 0.3,  key: 'aero',  burns: true },                // wood: light, catches fire
+  keg:   { r: 0.2,  mass: 1.2, bounce: 0.3,  key: 'pyro',  explodes: true },             // goes off when lit or hit hard
+  stone: { r: 0.2,  mass: 2.5, bounce: 0.2,  key: 'terra', earth: true },                // heavy
+  ball:  { r: 0.13, mass: 2,   bounce: 0.6,  key: 'terra', earth: true },                // steel: heavy and lively
+};
+const GRIP = { aero: 'Telekinesis', aqua: 'Puppetry', terra: 'Unearth', pyro: 'Fireball' };
+const objects = [];
+const objGroup = new THREE.Group();
+scene.add(objGroup);
+
+function objectMesh(kind) {
+  if (kind === 'crate') return new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32, 3, 3, 3), stoneMat(false, { dark: 0x2b1708, light: 0x8f5c2a, seam: 0x1a0d04, amt: 0.9, grain: [1.5, 22, 1.5] }));
+  if (kind === 'keg') return new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 12, 3), stoneMat(false, { dark: 0x3a0a06, light: 0xc22d18, seam: 0xffc21a, amt: 0.9, grain: [3, 9, 3] }));
+  if (kind === 'ball') return new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 2), stoneMat(true));
+  return new THREE.Mesh(craggy(new THREE.DodecahedronGeometry(0.2, 1), 0.07), stoneMat());
+}
+function spawnObject(kind, pos) {
+  if (objects.filter(o => !o.dead).length >= 14) {         // keep the room from filling up: retire the oldest loose one
+    const old = objects.find(o => !o.dead && !o.held);
+    if (old) old.dead = true;
+  }
+  const mesh = objectMesh(kind);
+  mesh.position.copy(pos);
+  mesh.rotation.y = Math.random() * 6.28;
+  objGroup.add(mesh);
+  const o = { kind, def: OBJ[kind], mesh, pos: pos.clone(), vel: new THREE.Vector3(), rest: false, held: false, dead: false,
+    burnUntil: -1, fuse: -1, hitT: -9 };
+  objects.push(o);
+  return o;
+}
+function destroyObject(o, t) {
+  if (o.dead) return;
+  o.dead = true;
+  puff(o.def.key === 'pyro' ? 'pyro' : 'terra', o.pos, 34, 3.2, { up: 1.5 });
+  thud();
+}
+function scatterObjects() {
+  for (const o of objects) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); }
+  objects.length = 0;
+  const box = roomBounds();
+  for (const kind of ['crate', 'crate', 'keg', 'stone', 'stone', 'ball']) {
+    spawnObject(kind, new THREE.Vector3(
+      THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), OBJ[kind].r,
+      THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()))).rest = true;
+  }
+}
+function ignite(o, t) {
+  if (o.dead) return;
+  if (o.def.explodes) { if (o.fuse < 0) o.fuse = t + 0.35; }
+  else if (o.def.burns && o.burnUntil < 0) o.burnUntil = t + 2.5;
+}
+// Push on an object. Wakes it if it was resting.
+function kick(o, x, y, z) { o.vel.x += x / o.def.mass; o.vel.y += y / o.def.mass; o.vel.z += z / o.def.mass; o.rest = false; }
+
+// A blast: hurts echoes, throws objects, lights what can burn.
+function explode(point, key, radius, t, dmg) {
+  const centre = point.clone();
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), energyMat('pyro', { scale: [4, 4, 4], flow: [0, 0.6, 0], cut: 0.22 }));
+  ball.position.copy(centre);
+  puff('pyro', centre, 80, radius * 4, { life: 0.5 });
+  thump(); tone(260, 40, 0.5, 0.35, 'sawtooth');
+  addEffect([ball], (n) => {
+    const k = (n - t) / 0.32;
+    ball.scale.setScalar(0.1 + radius * Math.min(k, 1));
+    ball.material.opacity = Math.max(1 - k, 0);
+    return k < 1;
+  });
+  for (const e of echoes) {
+    if (isLive(e, t) && e.group.position.distanceTo(centre) < radius) hit(e, key, t, e.group.position.clone().sub(centre).normalize(), { damage: dmg });
+  }
+  for (const o of objects) {
+    if (o.dead || o.held) continue;
+    const away = o.pos.clone().sub(centre), dist = away.length();
+    if (dist > radius * 1.3) continue;
+    away.normalize();
+    kick(o, away.x * 6, 3.5, away.z * 6);
+    if (key === 'pyro') ignite(o, t);
+  }
+}
+
+// Air closing around something until it gives.
+function crushObject(o, t) {
+  const p = o.pos.clone();
+  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), glowMat(ELEMENTS.aero.color, 0.6));
+  shell.material.wireframe = true;
+  shell.position.copy(p);
+  addEffect([shell], (n) => { const k = (n - t) / 0.18; shell.scale.setScalar(Math.max(0.45 * (1 - k), 0.02)); shell.rotation.y += 0.4; return k < 1; });
+  if (o.def.explodes) { o.dead = true; explode(p, 'pyro', 1.7, t, 2); return; }
+  destroyObject(o, t);
+  const heavy = o.def.mass >= 2;
+  for (const e of echoes) {                                // the pieces go everywhere
+    if (isLive(e, t) && e.group.position.distanceTo(p) < 1.2) hit(e, heavy ? 'terra' : 'aero', t, e.group.position.clone().sub(p).normalize(), { damage: heavy ? 2 : 1 });
+  }
+}
+
+const _on = new THREE.Vector3(), _op = new THREE.Vector3(), _od = new THREE.Vector3();
+function updateObjects(t, dt) {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i];
+    if (o.dead) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); objects.splice(i, 1); continue; }
+    const r = o.def.r;
+    if (o.fuse > 0) {
+      puff('pyro', o.pos, 2, 1.5, { up: 2, life: 0.25 });
+      if (t >= o.fuse) { const p = o.pos.clone(); o.dead = true; explode(p, 'pyro', 1.7, t, 2); continue; }
+    }
+    if (o.burnUntil > 0) {
+      puff('pyro', o.pos, 2, 0.6, { up: 1.6, jitter: 0.25 });
+      if (t >= o.burnUntil) {
+        destroyObject(o, t);
+        for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(o.pos) < 0.9) hit(e, 'pyro', t, UP, { damage: 1 });
+        continue;
+      }
+    }
+    if (!o.rest) {
+      if (!o.held) o.vel.y -= 9.8 * dt;
+      const speed = o.vel.length();
+      if (speed > 1e-4) {
+        _od.copy(o.vel).divideScalar(speed);
+        _on.copy(o.pos).addScaledVector(o.vel, dt);
+        const wall = collide(o.pos, _op.copy(_on).addScaledVector(_od, r));
+        if (wall) {
+          o.pos.copy(wall.point).addScaledVector(wall.normal, r);
+          const vn = o.vel.dot(wall.normal);
+          o.vel.addScaledVector(wall.normal, -(1 + o.def.bounce) * vn).multiplyScalar(0.85);
+          if (speed > 1.5) thud();
+          if (o.def.explodes && speed > 7) ignite(o, t);
+          if (!o.held && wall.normal.y > 0.7 && o.vel.length() < 0.6) { o.vel.set(0, 0, 0); o.rest = true; }
+        } else o.pos.copy(_on);
+      }
+      if (o.pos.y < r) {                                   // the floor is always there, scanned or not
+        o.pos.y = r;
+        if (o.vel.y < 0) { o.vel.y *= -o.def.bounce; o.vel.x *= 0.85; o.vel.z *= 0.85; }
+        if (!o.held && o.vel.length() < 0.6) { o.vel.set(0, 0, 0); o.rest = true; }
+      }
+      o.mesh.rotation.x += o.vel.z * dt / r;
+      o.mesh.rotation.z -= o.vel.x * dt / r;
+      // Moving fast enough to hurt.
+      if (speed > 2 && t - o.hitT > 0.3) {
+        for (const e of echoes) {
+          if (!isLive(e, t) || e.group.position.distanceTo(o.pos) > r + 0.14) continue;
+          o.hitT = t;
+          hit(e, o.def.earth ? 'terra' : 'aero', t, _od, { damage: o.def.mass >= 2 ? 2 : 1 });
+          if (o.def.explodes && speed > 4) ignite(o, t);
+          o.vel.multiplyScalar(-0.35);
+          break;
+        }
+      }
+    }
+    o.mesh.position.copy(o.pos);
+  }
+}
+
+// ---------- grip: holding on to something ----------
+// Aero holds objects (and can crush them with the other fist). Aqua holds echoes, the water in them.
+// Terra holds stone and steel, or tears a fresh boulder out of the floor. Pyro's version is a charged fireball.
+const _ga = new THREE.Vector3();
+function findGrabTarget(key, eye, dir, t) {
+  let best = null, bestAngle = 0.24;
+  if (key === 'aero' || key === 'terra') {
+    for (const o of objects) {
+      if (o.dead || o.held || (key === 'terra' && !o.def.earth)) continue;
+      const a = _ga.copy(o.pos).sub(eye).angleTo(dir);
+      if (a < bestAngle && (key === 'terra' || lineOfSight(eye, o.pos))) { bestAngle = a; best = { type: 'object', obj: o, pos: o.pos }; }
+    }
+  }
+  if (key === 'aqua') {
+    for (const e of echoes) {
+      if (!isLive(e, t)) continue;
+      const a = _ga.copy(e.group.position).sub(eye).angleTo(dir);
+      if (a < bestAngle) { bestAngle = a; best = { type: 'echo', e, pos: e.group.position }; }
+    }
+  }
+  if (!best && key === 'terra' && dir.y < -0.15) {           // nothing to hold: aim at the floor and pull one out
+    const k = -eye.y / dir.y;
+    if (k > 0.6 && k < 4.5) best = { type: 'ground', pos: eye.clone().addScaledVector(dir, k) };
+  }
+  return best;
+}
+// g is whatever is doing the holding: a tracked hand, or the pointer in preview.
+function beginHold(g, key, target, eye, t) {
+  let type = target.type, obj = target.obj || null;
+  if (type === 'ground') {
+    obj = spawnObject('stone', target.pos.clone().setY(0.05));
+    puff('terra', target.pos, 40, 2.6, { up: 2.5, jitter: 0.25 });
+    firePulse(target.pos);
+    type = 'object';
+  }
+  if (obj) { obj.held = true; obj.rest = false; }
+  g.hold = { key, type, obj, e: target.e || null, dist: (obj ? obj.pos : target.pos).distanceTo(eye),
+    pv: new THREE.Vector3(), lastSlam: -9, lastWring: -9, reach0: 1 };
+  lastCast = key; castSound[key]();
+  hudNote = GRIP[key].toLowerCase(); drawHud();
+}
+const _want = new THREE.Vector3(), _hstep = new THREE.Vector3(), _hnext = new THREE.Vector3(), _thread = new THREE.Vector3();
+// eye + dir is where the hand points from; reach is how far the arm is out compared with when it grabbed.
+// input: { hand: Vector3, squeeze: other fist held, squeezeEdge: other fist just closed }
+function updateHold(g, eye, dir, reach, input, t, dt) {
+  const h = g.hold;
+  if (!h) return;
+  if ((h.obj && h.obj.dead) || (h.e && h.e.down)) { g.hold = null; return; }
+  const dist = THREE.MathUtils.clamp(h.dist * reach * reach, 0.5, 7);    // push your arm out and it goes further away
+  _want.copy(eye).addScaledVector(dir, dist);
+  _want.y = Math.max(_want.y, 0.15);
+  const at = h.obj ? h.obj.pos : h.e.group.position;
+  for (let i = 0; i < 2; i++) {                             // a visible line from hand to what it holds
+    _thread.copy(input.hand).lerp(at, Math.random());
+    puff(h.key, _thread, 1, 0.2, { life: 0.18, size: h.key === 'aqua' ? 0.02 : 0.016, grav: 0, jitter: 0.03 });
+  }
+  if (h.obj) {
+    const o = h.obj;
+    o.rest = false;
+    o.vel.copy(_want).sub(o.pos).multiplyScalar(h.key === 'terra' ? 6 : 10).clampLength(0, 12);
+    if (h.key === 'aero') {
+      const a = t * 9;
+      puff('aero', _thread.set(o.pos.x + Math.cos(a) * 0.3, o.pos.y + Math.sin(a * 0.7) * 0.2, o.pos.z + Math.sin(a) * 0.3), 1, 0.3, { life: 0.25 });
+      if (input.squeezeEdge) { crushObject(o, t); g.hold = null; hudNote = 'crush'; drawHud(); }
+    }
+    return;
+  }
+  // Puppetry: the echo goes where the hand says. Slam it into the room or into another echo.
+  const e = h.e;
+  h.pv.copy(_want).sub(e.home).multiplyScalar(8).clampLength(0, 9);
+  _hstep.copy(h.pv).multiplyScalar(dt);
+  const speed = h.pv.length();
+  _hnext.copy(e.home).add(_hstep).addScaledVector(_hstep.clone().normalize(), 0.1);
+  const wall = speed > 0.01 ? collide(e.home, _hnext) : null;
+  if (wall) {
+    if (speed > 2.5 && t - h.lastSlam > 0.5) {
+      h.lastSlam = t;
+      impact(wall.point, wall.normal, 'aqua', t, 0.35);
+      hudNote = 'slam'; hit(e, 'aqua', t, ZERO, { damage: 1 });
+    }
+  } else e.home.add(_hstep);
+  e.restY = e.home.y; e.airborne = false; e.vel.set(0, 0, 0);
+  if (speed > 2 && t - h.lastSlam > 0.5) {
+    for (const o2 of echoes) {
+      if (o2 === e || !isLive(o2, t) || o2.group.position.distanceTo(e.home) > 0.24) continue;
+      h.lastSlam = t;
+      hudNote = 'slam';
+      hit(o2, 'aqua', t, h.pv.clone().normalize(), { damage: 1 });
+      hit(e, 'aqua', t, ZERO, { damage: 1 });
+      break;
+    }
+  }
+  if (!e.down && input.squeeze && t - h.lastWring > 0.6) {  // the other fist closes: wring it out
+    h.lastWring = t;
+    hit(e, 'aqua', t, ZERO, { damage: 1 });
+    hudNote = 'wring'; drawHud();
+  }
+  if (e.down) g.hold = null;
+}
+function endHold(g) {
+  const h = g.hold;
+  if (!h) return;
+  if (h.obj) {                                                             // let go while it is moving and it flies
+    const o = h.obj, t = now();
+    o.held = false;
+    o.vel.multiplyScalar(1.25);
+    const speed = o.vel.length();
+    if (speed > 3) {                                // a real throw: lean it toward an echo it is roughly headed for
+      let best = null, bestAngle = 0.4;
+      for (const e of echoes) {
+        if (!isLive(e, t)) continue;
+        const a = _ga.copy(e.group.position).sub(o.pos).angleTo(o.vel);
+        if (a < bestAngle) { bestAngle = a; best = e; }
+      }
+      if (best) {
+        const flight = best.group.position.distanceTo(o.pos) / speed;
+        o.vel.copy(best.group.position).sub(o.pos).normalize().multiplyScalar(speed);
+        o.vel.y += 4.9 * flight;                    // enough loft to cancel the drop on the way
+      }
+    }
+  }
+  else if (h.e && !h.e.down) { h.e.vel.x = h.pv.x * 0.6; h.e.vel.z = h.pv.z * 0.6; }
+  g.hold = null;
+}
+
+// Rings that show what a hand would take hold of.
+const reticles = [0, 1].map(() => {
+  const r = new THREE.Mesh(new THREE.RingGeometry(0.24, 0.255, 44), glowMat(ACID, 0.8));
+  r.visible = false; r.renderOrder = 22;
+  scene.add(r);
+  return r;
+});
+function showReticle(i, target, key, eye) {
+  const r = reticles[i];
+  r.visible = !!target;
+  if (!target) return;
+  r.position.copy(target.pos);
+  r.material.color.copy(ELEMENTS[key].color);
+  r.lookAt(eye);
+}
+// Pyro's charge, one per hand: a ball of fire that grows in a held fist.
+const chargeOrbs = [0, 1].map(() => {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), glowMat(new THREE.Color(ENERGY.pyro.a), 0.9)));
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(1, 20, 16), energyMat('pyro', { scale: [14, 14, 14], flow: [0, 1, 0] })));
+  g.visible = false; g.renderOrder = 16;
+  scene.add(g);
+  return g;
+});
+const CHARGE_MIN = 0.6, CHARGE_MAX = 1.6;
+function showCharge(i, pos, charge) {
+  const g = chargeOrbs[i];
+  g.visible = charge > 0.2;
+  if (!g.visible) return;
+  g.position.copy(pos);
+  g.scale.setScalar(0.03 + 0.06 * Math.min(charge / CHARGE_MAX, 1));
+  if (charge > CHARGE_MIN && Math.random() < 0.5) puff('pyro', pos, 1, 0.6, { up: 1 });
+}
+function throwFireball(hand, dir, eye, fwd, charge, t) {
+  cast('pyro', 'grip', { hand, dir, eye, fwd, t, scale: 1 + Math.min(charge, CHARGE_MAX) });
 }
 
 // ---------- senses ----------
@@ -1663,6 +2050,7 @@ function newHand() {
   return {
     valid: false, seen: false, armed: false, ready: true, clapBlock: -1,
     lastTouch: -1, lastCast: -1, stillT: 0, curl: 1.4, speed: 0,
+    hold: null, aim: null, aimT: -9, charge: 0, prevOtherFist: false,
     palm: new THREE.Vector3(), normal: new THREE.Vector3(), across: new THREE.Vector3(),
     wrist: new THREE.Vector3(), knuckle: new THREE.Vector3(), indexBase: new THREE.Vector3(),
     pinkyBase: new THREE.Vector3(), indexTip: new THREE.Vector3(), hasTip: false,
@@ -1777,6 +2165,8 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (st.normal.dot(_off) > 0.6) { menuHand = st; break; }
   }
   menuGroup.visible = !!menuHand;
+  reticles[0].visible = reticles[1].visible = false;
+  chargeOrbs[0].visible = chargeOrbs[1].visible = false;
   if (menuHand) {
     const pointer = menuHand === L ? R : L;
     menuOrbs.forEach((orb, i) => {
@@ -1812,7 +2202,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     const hitFist = nearestSurface(st.knuckle);
     const near = Math.min(hitPalm.dist, hitFist.dist) < TOUCH_OFF;
     if (!near) st.armed = true;
-    else if (st.armed && t - st.lastTouch > 0.35) {
+    else if (st.armed && !st.hold && t - st.lastTouch > 0.35) {
       if (isFist && hitFist.dist < SLAM_ON) {
         st.armed = false; st.lastTouch = t; st.ready = false;
         cast(selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: hitFist.point, t });
@@ -1826,7 +2216,39 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
         }
       }
     }
+    // Grip. A hand that is holding something does nothing else until it opens.
+    const idx = st === L ? 0 : 1;
+    _off.subVectors(st.palm, viewerPos);
+    const reachNow = _off.length();
+    const reachDir = _off.clone().divideScalar(reachNow || 1);
+    const otherFist = other.valid && !other.hold && other.curl < CURL_FIST && !other.point;
+    if (st.hold) {
+      if (st.curl > 1.45) endHold(st);
+      else updateHold(st, viewerPos, reachDir, reachNow / st.hold.reach0, { hand: st.palm, squeeze: otherFist, squeezeEdge: otherFist && !st.prevOtherFist }, t, dt);
+      st.prevOtherFist = otherFist;
+      st.ready = false; st.armed = false;
+      continue;
+    }
+    st.prevOtherFist = otherFist;
     if (near || t - st.clapBlock < 0.4) continue;
+    if (selected !== 'pyro') {
+      if (isOpen && st.speed < 0.9) {                // an open hand reaching: show what it would take
+        st.aim = findGrabTarget(selected, viewerPos, reachDir, t);
+        st.aimT = t;
+        showReticle(idx, st.aim, selected, viewerPos);
+      } else if (isFist && st.aim && t - st.aimT < 0.35 && st.speed < 0.9) {
+        beginHold(st, selected, st.aim, viewerPos, t);
+        st.hold.reach0 = reachNow || 1;
+        st.aim = null; st.ready = false;
+        continue;
+      }
+      st.charge = 0;
+    } else {
+      // Pyro: a raised fist that stays closed builds a fireball; the next punch throws it.
+      if (isFist && st.palm.y > viewerPos.y - 0.5) st.charge = Math.min(st.charge + dt, CHARGE_MAX);
+      else if (!isFist) st.charge = 0;
+      showCharge(idx, st.knuckle, st.charge);
+    }
 
     // Held senses: Aqua reads through a raised open palm, Pyro through a raised fist.
     const raised = st.palm.y > viewerPos.y - 0.5;
@@ -1846,8 +2268,13 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
         else if (gesture === 'shove') { c.hand = st.palm.clone(); c.dir = st.normal.clone(); }
         else if (gesture === 'point') { c.hand = st.indexTip.clone(); c.dir = st.pointDir.clone(); }
         else { c.hand = st.palm.clone(); c.dir = _fwd.clone(); }   // lift and sweep aim where you look
+        if (gesture === 'punch' && selected === 'pyro' && st.charge > CHARGE_MIN) {
+          throwFireball(c.hand, c.dir, c.eye, c.fwd, st.charge, t);
+          st.charge = 0;
+          continue;
+        }
         // Twin cast: the other hand is doing the same thing, the same way, right now.
-        if (isTwin(st, other) && other !== menuHand) {
+        if (isTwin(st, other) && other !== menuHand && !other.hold) {
           other.ready = false; other.lastCast = t;
           c.power = 1.6;
           if (gesture !== 'lift' && gesture !== 'sweep') c.hand.lerp(gesture === 'punch' ? other.knuckle : gesture === 'point' ? other.indexTip : other.palm, 0.5);
@@ -1904,6 +2331,7 @@ let previewGesture = 'sense';
 let previewHold = null;      // { kind, until, origin, dir }
 function selectGesture(g) {
   previewGesture = g;
+  if (squeezeBtn) squeezeBtn.style.display = g === 'grip' ? '' : 'none';
   for (const el of moveEls) el.classList.toggle('on', el.dataset.g === g);
 }
 const pointer = new THREE.Vector2();
@@ -1924,6 +2352,13 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   const dir = aimPoint.clone().sub(hand).normalize();
   const fwd = flat(aim);
 
+  if (previewGesture === 'grip') {
+    previewAim.copy(aim);
+    if (selected === 'pyro') { previewGrip.chargeFrom = t; return; }
+    const tgt = findGrabTarget(selected, eye, aim, t);
+    if (tgt) beginHold(previewGrip, selected, tgt, eye, t);
+    return;
+  }
   if (previewGesture === 'sense') {
     if (selected === 'terra') { if (hit) firePulse(hit.point); }
     else if (selected === 'aero') senseAero(hand, t);
@@ -1940,12 +2375,43 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   }
   cast(selected, previewGesture, c);
 });
+// Preview grip: press and drag to hold, release to throw. C (or the Squeeze button) is the other fist.
+const previewGrip = { hold: null, chargeFrom: -1, squeeze: false, prevSqueeze: false };
+const previewAim = new THREE.Vector3(0, 0, -1);
+const squeezeBtn = document.getElementById('squeeze');
+renderer.domElement.addEventListener('pointermove', (ev) => {
+  if (renderer.xr.isPresenting) return;
+  pointer.set((ev.clientX / window.innerWidth) * 2 - 1, -(ev.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(pointer, camera);
+  previewAim.copy(raycaster.ray.direction);
+});
+const releasePreview = () => {
+  if (renderer.xr.isPresenting) return;
+  if (previewGrip.hold) endHold(previewGrip);
+  if (previewGrip.chargeFrom >= 0) {
+    const t = now(), charge = t - previewGrip.chargeFrom;
+    previewGrip.chargeFrom = -1;
+    if (charge > 0.3) {
+      const hand = camera.position.clone().add(new THREE.Vector3(0.25, -0.3, -0.35).applyQuaternion(camera.quaternion));
+      const tgt = camera.position.clone().addScaledVector(previewAim, 4);
+      throwFireball(hand, tgt.sub(hand).normalize(), camera.position.clone(), flat(previewAim), charge, t);
+    }
+  }
+};
+renderer.domElement.addEventListener('pointerup', releasePreview);
+renderer.domElement.addEventListener('pointercancel', releasePreview);
+window.addEventListener('keydown', (ev) => { if (ev.key.toLowerCase() === 'c') previewGrip.squeeze = true; });
+window.addEventListener('keyup', (ev) => { if (ev.key.toLowerCase() === 'c') previewGrip.squeeze = false; });
+if (squeezeBtn) {
+  squeezeBtn.addEventListener('pointerdown', () => { previewGrip.squeeze = true; });
+  for (const name of ['pointerup', 'pointerleave', 'pointercancel']) squeezeBtn.addEventListener(name, () => { previewGrip.squeeze = false; });
+}
 for (const el of chipEls) el.addEventListener('click', () => { ensureAudio(); selectElement(el.dataset.el); });
 for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); selectGesture(el.dataset.g); });
 window.addEventListener('keydown', (ev) => {
   const i = '1234'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
-  const g = 'qwertyu'.indexOf(ev.key.toLowerCase());
+  const g = 'qwertyui'.indexOf(ev.key.toLowerCase());
   if (g >= 0) selectGesture(GESTURES[g]);
 });
 
@@ -2004,7 +2470,7 @@ if (navigator.xr && navigator.xr.isSessionSupported) {
     if (ok) {
       enterBtn.disabled = false;
       statusEl.textContent = 'Headset ready.';
-      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Do a move with both hands for a twin version.';
+      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Do a move with both hands for a twin version. To hold something, reach an open hand at it and close your fist; open to let go.';
     } else {
       statusEl.textContent = 'No mixed reality here. Open this page in the Quest browser to play for real.';
     }
@@ -2057,6 +2523,17 @@ renderer.setAnimationLoop((ms, frame) => {
     camera.lookAt(0, 0.9, 0);
     viewerPos.copy(camera.position);
     if (!demoFired && t > 1.2) { demoFired = true; firePulse(new THREE.Vector3(-0.9, 0.74, -0.6)); }
+    if (previewGesture === 'grip') {
+      const hand = camera.position.clone().add(new THREE.Vector3(0.25, -0.3, -0.35).applyQuaternion(camera.quaternion));
+      reticles[1].visible = chargeOrbs[1].visible = false;
+      if (previewGrip.hold) {
+        reticles[0].visible = false;
+        updateHold(previewGrip, camera.position, previewAim, 1, { hand, squeeze: previewGrip.squeeze, squeezeEdge: previewGrip.squeeze && !previewGrip.prevSqueeze }, t, dt);
+      } else if (selected !== 'pyro') showReticle(0, findGrabTarget(selected, camera.position, previewAim, t), selected, camera.position);
+      else reticles[0].visible = false;
+      showCharge(0, hand, previewGrip.chargeFrom >= 0 ? t - previewGrip.chargeFrom : 0);
+      previewGrip.prevSqueeze = previewGrip.squeeze;
+    } else { reticles[0].visible = false; chargeOrbs[0].visible = false; }
     if (previewHold) {
       if (t > previewHold.until) previewHold = null;
       else if (previewHold.kind === 'aqua') held.aqua = { origin: previewHold.origin, dir: previewHold.dir };
@@ -2065,6 +2542,7 @@ renderer.setAnimationLoop((ms, frame) => {
   }
 
   updateHeldSenses(t);
+  updateObjects(t, dt);
   updateEchoes(t, dt, viewerPos);
   updateEffects(t, dt);
   const layer = frame && renderer.xr.isPresenting ? frame.session.renderState.baseLayer : null;
@@ -2077,6 +2555,7 @@ renderer.setAnimationLoop((ms, frame) => {
 window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin,
+  objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
   setHold(h) { previewHold = h; },
   get down() { return downCount; },
   get selected() { return selected; },

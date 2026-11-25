@@ -93,7 +93,22 @@ const FORM_LOOK = {
   lava: { heat: 1 },
 };
 let terraForm = 'rock';
-const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip'];
+// The other three disciplines have sub-elements too. Same rule: pick the discipline again to step to the next.
+//   Pyro  flame      burns: a second hit lands by itself.
+//         lightning  no burn. Every hit arcs to one more creature nearby, and conducts through anything soaked or steel-struck.
+//         blast      no burn. Every hit goes off as a small explosion that throws objects and hurts what is close.
+//   Aqua  water      soaks.
+//         ice        freezes instead. Breaker becomes a standing wall of ice, Geyser a standing spike. Globe becomes a shard.
+//         steam      no soak. Blinds for 2 s, and shots leave a scalding cloud where they land.
+//   Aero  wind       shoves away.
+//         vacuum     pulls toward you instead, and leaves the target short of air: a second hit lands by itself.
+//         sound      goes through walls and cover, and stuns for 2.5 s. No shove.
+const FORMS = { terra: TERRA_FORMS, pyro: ['flame', 'lightning', 'blast'], aqua: ['water', 'ice', 'steam'], aero: ['wind', 'vacuum', 'sound'] };
+const forms = { pyro: 'flame', aqua: 'water', aero: 'wind' };
+const formOf = (key) => key === 'terra' ? terraForm : forms[key];
+// Which set of colours a move is drawn in.
+const lookOf = (key, m) => m && m.form === 'lightning' ? 'volt' : key;
+const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip', 'charge'];
 
 // What each verb does per discipline. kind picks the behaviour, the rest are its numbers.
 const MOVES = {
@@ -105,6 +120,7 @@ const MOVES = {
     slam:  { name: 'Eruption',    kind: 'ring',   maxR: 3.6, height: 1.4 },
     point: { name: 'Volt',        kind: 'beam',   range: 14, chain: 3, volt: true },
     grip:  { name: 'Fireball',    kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
+    charge: { name: 'Fireball',   kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
   },
   aqua: {
     punch: { name: 'Globe',       kind: 'bolt',   speed: 9, radius: 0.24, shape: 'blob', size: 0.085 },
@@ -114,6 +130,7 @@ const MOVES = {
     slam:  { name: 'Surge',       kind: 'ring',   maxR: 4.2, height: 1.1, launch: true },
     point: { name: 'Frost Needle', kind: 'bolt',  speed: 14, radius: 0.2, shape: 'shard', freeze: true },
     grip:  { name: 'Water Grip',  kind: 'grip' },
+    charge: { name: 'Deluge',     kind: 'bolt',   speed: 8, radius: 0.35, shape: 'blob', size: 0.1, splash: 1.3, damage: 2, life: 2.2 },
   },
   terra: {
     punch: { name: 'Stone Shot',  kind: 'bolt',   speed: 8,  radius: 0.28, shape: 'rock', gravity: 2.5 },
@@ -123,6 +140,7 @@ const MOVES = {
     slam:  { name: 'Fault Line',  kind: 'fault',  length: 8 },
     point: { name: 'Ferro Disc',  kind: 'bolt',   speed: 10, radius: 0.25, shape: 'disc', bounces: 3, pierce: true, life: 2.5 },
     grip:  { name: 'Unearth',     kind: 'grip' },
+    charge: { name: 'Meteor',     kind: 'bolt',   speed: 9, radius: 0.4, shape: 'rock', size: 0.18, gravity: 3, quake: 1.2, damage: 3, life: 3 },
   },
   aero: {
     punch: { name: 'Air Bullet',  kind: 'bolt',   speed: 16, radius: 0.2, shape: 'orb', size: 0.03, bounces: 2 },
@@ -132,6 +150,7 @@ const MOVES = {
     slam:  { name: 'Shockwave',   kind: 'ring',   maxR: 4.5, height: 2.2 },
     point: { name: 'Void',        kind: 'void',   radius: 1.5, range: 10 },
     grip:  { name: 'Wind Grip',   kind: 'grip' },
+    charge: { name: 'Air Cannon', kind: 'bolt',   speed: 15, radius: 0.5, shape: 'vortex', pierce: true, damage: 2, life: 1.6 },
   },
 };
 
@@ -667,7 +686,7 @@ function scatterEchoes(keepWorld = false) {
     taken.push(e.home.clone());
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;
     e.hp = KINDS[e.kind].hp; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
-    e.burnAt = e.soakedUntil = e.frozenUntil = e.metalUntil = e.blindUntil = -1;
+    e.burnAt = e.soakedUntil = e.frozenUntil = e.metalUntil = e.blindUntil = e.drainAt = -1;
     e.baseColor.copy(ACID); e.ice.visible = false; e.shell.scale.setScalar(1);
     e.goal.copy(e.home); e.goalUntil = 0; e.windup = -1; e.puppet = false; e.last.copy(e.home);
     for (const bead of e.tail) { bead.position.copy(e.home); bead.visible = false; }
@@ -759,17 +778,29 @@ function hit(e, key, t, dir, m = {}) {
   } else if (key === 'aqua') {
     e.burnAt = -1;                                  // water puts fire out
     if (m.freeze) { e.frozenUntil = t + 6; e.vel.set(0, e.vel.y, 0); }
+    else if (m.steam) { e.blindUntil = t + 2; note = note || 'scalded blind'; }
     else e.soakedUntil = t + 6;
   }
   if (!(e.frozenUntil > t)) {
     if (m.launch) { e.airborne = true; e.vel.y = 2.2; }       // a slow toss: about a metre up, nearly two seconds of hang
-    if ((key === 'aero' && m.kind !== 'void') || m.kind === 'wall' || m.roll) {   // shoved along the floor
+    if (m.from) {                                   // vacuum: dragged toward whoever cast it
+      _hd.copy(m.from).sub(pos).setY(0).normalize();
+      e.vel.x += _hd.x * 3; e.vel.z += _hd.z * 3;
+      e.drainAt = t + 1.5;
+    } else if (!m.sonic && ((key === 'aero' && m.kind !== 'void') || m.kind === 'wall' || m.roll)) {   // shoved along the floor
       const push = key === 'aero' ? 3.5 : 2.5;
       e.vel.x += _hd.x * push; e.vel.z += _hd.z * push;
     }
   }
+  if (m.sonic) { e.blindUntil = t + 2.5; note = note || 'stunned'; }
   e.revealedUntil = Math.max(e.revealedUntil, t + 5);          // once you have hit it, you can keep track of it
   e.hp -= dmg;
+  if (m.form === 'lightning' && !m.arc) {           // jumps to the nearest other creature
+    let near = null, nearDist = 2.4;
+    for (const o of echoes) { if (o === e || o.down) continue; const dd = o.group.position.distanceTo(pos); if (dd < nearDist) { nearDist = dd; near = o; } }
+    if (near) { zap(pos.clone(), near.group.position.clone(), t); hit(near, 'pyro', t, near.group.position.clone().sub(pos).normalize(), { damage: 1, volt: true, arc: true }); _hp.copy(e.group.position); }
+  }
+  if (m.form === 'blast' && m.kind && m.kind !== 'bolt') explode(e.group.position.clone(), 'pyro', 0.7, t, 1, true);
   if (note) { hudNote = note; drawHud(); }
   if (e.hp > 0) { e.flashT = t; tick(); puff(key, pos, 8, 1.6); return; }
 
@@ -909,6 +940,7 @@ function updateEchoes(t, dt, viewerPos) {
     }
     if (e.down) continue;
     if (e.burnAt > 0 && t >= e.burnAt) { e.burnAt = -1; hit(e, 'pyro', t, UP, { damage: 1, noBurn: true }); if (e.down) continue; }
+    if (e.drainAt > 0 && t >= e.drainAt) { e.drainAt = -1; hit(e, 'aero', t, ZERO, { damage: 1, kind: 'void' }); if (e.down) continue; }
     if (AI.on) creatureAI(e, t, dt, viewerPos);
     moveEcho(e, t, dt);
     e.moving = dt > 0 ? e.home.distanceTo(e.last) / dt : 0;
@@ -1009,6 +1041,7 @@ const ENERGY = {
   pyro: { a: 0xfff0b8, b: 0xff5a0c, c: 0x7a0c02, scale: [9, 7, 9], speed: 2.6, cut: 0.38, soft: 0.26 },
   aqua: { a: 0xe6fbff, b: 0x1487ff, scale: [5, 4, 5],     speed: 1.6, cut: 0.2,  soft: 0.5 },
   aero: { a: 0xffffff, b: 0xbfeeff, scale: [16, 1.6, 16], speed: 4.5, cut: 0.56, soft: 0.16 },
+  volt: { a: 0xffffff, b: 0x9fc0ff, c: 0x3a55d6, scale: [14, 14, 14], speed: 7, cut: 0.46, soft: 0.14 },
 };
 // flow is the direction the pattern travels, in the mesh's own space. fadeY (0 to 1) thins it out toward the top of the mesh.
 // Water: mostly clear. You see it by its edges, its highlights and the light moving inside it, not by a colour.
@@ -1129,6 +1162,8 @@ function stoneMat(metal = false, pal = null) {
   });
 }
 // The material for anything Terra raises, in the form it was cast in.
+// Ice: water that has stopped moving. Cloudy, hard edged, still lets light through.
+function iceMat() { return waterMat({ flow: [0, 0, 0], scale: [10, 10, 10], amp: 0, body: 0.42 }); }
 function earthMat(form) {
   const look = FORM_LOOK[form || 'rock'];
   const mat = stoneMat(!!look.metal, look.pal || null);
@@ -1244,7 +1279,9 @@ const PCOL = {
   aero: [0xffffff, 0xdff9ff, 0xbfeeff].map(c => new THREE.Color(c)),
 };
 // How each discipline's loose matter behaves once it is in the air.
+PCOL.volt = [0xffffff, 0xcfe0ff, 0x7f9cff].map(c => new THREE.Color(c));
 const PSTYLE = {
+  volt:  { size: 0.022, life: 0.22, grav: 0,    drag: 2 },     // sparks
   pyro:  { size: 0.035, life: 0.5,  grav: -1.6, drag: 1.5 },   // embers rise
   aqua:  { size: 0.028, life: 0.6,  grav: 6,    drag: 0.4 },   // droplets fall
   terra: { size: 0.04,  life: 0.7,  grav: 7,    drag: 0.8 },   // chips drop fast
@@ -1318,7 +1355,7 @@ function boltMesh(key, m, color) {
     const blade = () => new THREE.RingGeometry(s * 0.66, s, 40, 3, Math.PI + 0.35, Math.PI - 0.7).rotateX(-Math.PI / 2).translate(0, 0, -s * 0.55);
     const matOpts = { flow: [0, 0, -1.4], scale: key === 'aero' ? [9, 9, 9] : [11, 11, 11], cut: key === 'aero' ? 0.4 : key === 'aqua' ? 0.12 : 0.28 };
     for (const tilt of [-0.4, 0.4]) {             // two crossed leaves, so it never goes edge-on and vanishes
-      const leaf = new THREE.Mesh(blade(), energyMat(key, matOpts));
+      const leaf = new THREE.Mesh(blade(), energyMat(lookOf(key, m), matOpts));
       leaf.rotation.z = tilt;
       g.add(leaf);
     }
@@ -1344,23 +1381,31 @@ function boltMesh(key, m, color) {
     const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 24, 18), waterMat({ flow: [0, 0, -1.2], scale: [9, 9, 9], amp: s * 0.5, body: 0.08 }));
     blob.geometry.scale(1, 1, 1.5);
     g.add(blob);
+  } else if (m.shape === 'vortex') {
+    // A ball of spinning air: three bands of wind turning inside each other.
+    for (let i = 0; i < 3; i++) {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.07, 10, 40), energyMat('aero', { flow: [1.4, 0, 0], scale: [5, 12, 5], cut: 0.36 }));
+      band.rotation.set(i * 1.05, i * 0.7, 0);
+      band.userData.spin = (i % 2 ? -1 : 1) * (9 + i * 3);
+      g.add(band);
+    }
   } else if (m.shape === 'jet') {
-    const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.075, 1.3, 16, 8, true), energyMat(key, { flow: [0, 0, -2.5], scale: [12, 12, 3], cut: 0.1 }));
+    const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.075, 1.3, 16, 8, true), energyMat(lookOf(key, m), { flow: [0, 0, -2.5], scale: [12, 12, 3], cut: 0.1 }));
     jet.geometry.rotateX(Math.PI / 2).translate(0, 0, -0.6);
     g.add(jet, new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), glowMat(new THREE.Color(ENERGY.aqua.a), 0.9)));
   } else if (key === 'aero') {
     // Air is mostly seen by what it drags along: a hard little core and a thin wake.
     const s = size || 0.03;
     g.add(new THREE.Mesh(new THREE.SphereGeometry(s, 10, 8), glowMat(color, 0.9)));
-    const wake = new THREE.Mesh(new THREE.ConeGeometry(s * 2.2, 0.7, 14, 4, true), energyMat(key, { flow: [0, 0, -3], scale: [30, 30, 3], opacity: 0.7 }));
+    const wake = new THREE.Mesh(new THREE.ConeGeometry(s * 2.2, 0.7, 14, 4, true), energyMat(lookOf(key, m), { flow: [0, 0, -3], scale: [30, 30, 3], opacity: 0.7 }));
     wake.geometry.rotateX(-Math.PI / 2).translate(0, 0, -0.38);
     g.add(wake);
   } else {
     // Fire: a white-hot core inside a ragged shell of flame, with a tail that tears off behind it.
     const s = size || 0.055;
     g.add(new THREE.Mesh(new THREE.SphereGeometry(s * 0.55, 12, 10), glowMat(new THREE.Color(ENERGY.pyro.a), 1)));
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(s * 1.5, 18, 14), energyMat(key, { flow: [0, 0, -1.2], scale: [16, 16, 12] })));
-    const tail = new THREE.Mesh(new THREE.ConeGeometry(s * 1.4, s * 9, 14, 6, true), energyMat(key, { flow: [0, 0, -2.2], scale: [14, 14, 6], cut: 0.44 }));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(s * 1.5, 18, 14), energyMat(lookOf(key, m), { flow: [0, 0, -1.2], scale: [16, 16, 12] })));
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(s * 1.4, s * 9, 14, 6, true), energyMat(lookOf(key, m), { flow: [0, 0, -2.2], scale: [14, 14, 6], cut: 0.44 }));
     tail.geometry.rotateX(-Math.PI / 2).translate(0, 0, -s * 5);   // narrows behind +Z travel
     g.add(tail);
   }
@@ -1370,13 +1415,13 @@ function boltMesh(key, m, color) {
 const _trail = new THREE.Vector3(), _side = new THREE.Vector3(), _back = new THREE.Vector3();
 function boltTrail(key, m, pos, dirN, dt) {
   const wide = m.shape === 'crescent' ? (m.size || 0.16) : m.roll ? 0.18 : 0.02;
-  const rate = m.shape === 'disc' ? 0 : m.shape === 'shard' ? 40 : { pyro: 110, aqua: 80, terra: m.roll ? 60 : 30, aero: 70 }[key];
+  const rate = m.shape === 'disc' ? 0 : m.shape === 'shard' ? 40 : { pyro: 110, volt: 90, aqua: 80, terra: m.roll ? 60 : 30, aero: 70 }[key];
   let n = rate * dt; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
   _side.set(-dirN.z, 0, dirN.x);
   for (let i = 0; i < n; i++) {
     _trail.copy(pos).addScaledVector(_side, (Math.random() * 2 - 1) * wide);
     if (m.roll) _trail.y = 0.03;
-    puff(key, _trail, 1, key === 'aero' ? 1.2 : 0.5, { dir: _back.copy(dirN).negate(), spread: 0.8, jitter: 0.03 });
+    puff(key, _trail, 1, key === 'aero' ? 1.2 : 0.5, { dir: _back.copy(dirN).negate(), spread: key === 'volt' ? 2 : 0.8, jitter: 0.03 });
   }
 }
 function castBolt(key, m, c) {
@@ -1391,7 +1436,8 @@ function castBolt(key, m, c) {
     if (target) vel.copy(target.group.position).sub(pos).normalize();
   }
   vel.multiplyScalar(m.speed);
-  const mesh = boltMesh(key, m, color);
+  const vk = lookOf(key, m);
+  const mesh = boltMesh(vk, m, color);
   mesh.scale.setScalar((m.power || 1) * (c.scale || 1));
   mesh.position.copy(pos);
   puff(key, pos, 10, 1.6, { dir: vel.clone().normalize(), spread: 0.7 });      // muzzle
@@ -1400,8 +1446,11 @@ function castBolt(key, m, c) {
   const look = new THREE.Vector3();
   const struck = new Set(), knocked = new Set();
   const stop = (point, t) => {
-    if (m.blast) explode(point, key, m.blast, t, 1);
+    if (m.blast) explode(point, key, m.blast, t, 1, !!m.noBurn);
     if (m.form === 'sand') spawnCloud('sand', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
+    if (m.form === 'steam') spawnCloud('steam', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
+    if (m.splash) splash(point, t, m.splash);
+    if (m.quake) quake(point, t, m.quake);
     if (m.form === 'lava') heatAt(point, 0.6, t);
     return false;
   };
@@ -1427,7 +1476,7 @@ function castBolt(key, m, c) {
     prev.copy(mesh.position);
     mesh.position.addScaledVector(vel, dt);
 
-    const wall = collide(prev, mesh.position);
+    const wall = m.sonic ? null : collide(prev, mesh.position);          // sound goes through walls
     let end = null;                               // where this step's travel stops, if it hits the room
     if (wall && wall.object.userData.barrier && !c.hostile) {
       wall.object.userData.barrier.struck(dirN.copy(vel).normalize(), key, t);
@@ -1481,7 +1530,9 @@ function castBolt(key, m, c) {
     mesh.lookAt(look.copy(mesh.position).add(dirN));
     if (m.shape === 'rock') mesh.rotateX(m.roll ? (t - born) * m.speed / (m.size || 0.2) : t * 9);   // a boulder turns as far as it travels
     if (m.shape === 'disc') mesh.children[0].rotation.y = t * 40;
-    boltTrail(key, m, mesh.position, dirN, dt);
+    if (m.shape === 'vortex') for (const band of mesh.children) band.rotation.z += dt * band.userData.spin;
+    boltTrail(vk, m, mesh.position, dirN, dt);
+    if (m.form === 'steam' && Math.random() < 0.4) fume(STEAM, mesh.position, 1, { size: 0.16, life: 0.6, rise: 0.2 });
     if (key === 'pyro') lightNow(mesh.position, FIRE_LIGHT, m.blast ? 1.8 : 1.0);
     else if (m.form === 'lava') lightNow(mesh.position, LAVA_LIGHT, 0.8);
     const age = t - born;
@@ -1499,7 +1550,7 @@ function castCone(key, m, c) {
   for (const e of echoes) {
     if (!isLive(e, c.t)) continue;
     _to.copy(e.group.position).sub(origin);
-    if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, e.group.position)) hit(e, key, c.t, d, m);
+    if (_to.length() < m.range && _to.angleTo(d) < m.angle && (m.sonic || lineOfSight(origin, e.group.position))) hit(e, key, c.t, d, m);
   }
   if (key === 'pyro') {
     for (const src of [...sources]) { _to.copy(src.pos).sub(origin); if (_to.length() < m.range && _to.angleTo(d) < m.angle + 0.15) evaporate(src, c.t); }
@@ -1512,7 +1563,7 @@ function castCone(key, m, c) {
     if (o.dead || o.held) continue;
     _to.copy(o.pos).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, o.pos)) {
-      const push = key === 'aero' ? 8 : 3;
+      const push = (key === 'aero' ? 8 : 3) * (m.from ? -0.8 : 1);     // vacuum drags it toward you
       const wasHostile = o.hostile;
       kick(o, d.x * push, 1.5, d.z * push);
       if (wasHostile && o.owner && !o.owner.down) {  // blown straight back at whoever sent it
@@ -1526,7 +1577,7 @@ function castCone(key, m, c) {
   const spread = Math.tan(m.angle);
   const body = new THREE.Mesh(
     new THREE.ConeGeometry(spread * m.range, m.range, 32, 10, true).translate(0, -m.range / 2, 0).rotateX(-Math.PI / 2),
-    energyMat(key, { flow: [0, 0, key === 'aero' ? 2.2 : 1.6], scale: key === 'aero' ? [3, 3, 14] : [5, 5, 3.5], cut: key === 'aero' ? 0.5 : 0.3 }),
+    energyMat(lookOf(key, m), { flow: [0, 0, key === 'aero' ? 2.2 : 1.6], scale: key === 'aero' ? [3, 3, 14] : [5, 5, 3.5], cut: key === 'aero' ? 0.5 : 0.3 }),
   );
   body.position.copy(origin);
   body.lookAt(origin.clone().add(d));
@@ -1574,10 +1625,10 @@ function castColumn(key, m, c) {
   if (key === 'terra') {
     // Stone answers from whatever is closest: the floor, a wall beside the target, the ceiling over it, a table.
     const near = target ? nearestRoomSurface(target.group.position, 2.4) : null;
-    const look = !target ? collide(c.eye, c.eye.clone().addScaledVector(d, 12)) : null;
+    const seen = !target ? collide(c.eye, c.eye.clone().addScaledVector(d, 12)) : null;
     if (near) { base.copy(near.point); axis.copy(near.normal); height = near.dist + 0.2; }
     else if (target) { base.set(target.group.position.x, 0, target.group.position.z); height = target.group.position.y + 0.18; }
-    else if (look) { base.copy(look.point); axis.copy(look.normal); height = 1.1; }
+    else if (seen) { base.copy(seen.point); axis.copy(seen.normal); height = 1.1; }
     else base.copy(c.eye).addScaledVector(flat(d, c.fwd), 1.5).setY(0);
   } else if (target) {
     base.set(target.group.position.x, 0, target.group.position.z);
@@ -1587,12 +1638,13 @@ function castColumn(key, m, c) {
   }
   const column = new THREE.Group();
   let body, core = null;
-  if (key === 'terra') {
+  const spike = key === 'terra' || m.form === 'ice';
+  if (spike) {
     // A real spike of rock: wide at the root, sharp at the tip, never the same twice.
-    body = new THREE.Mesh(craggy(new THREE.ConeGeometry(m.bottom, 1, 7, 5).translate(0, 0.5, 0), 0.05), earthMat(m.form));
+    body = new THREE.Mesh(craggy(new THREE.ConeGeometry(Math.max(m.bottom, 0.17), 1, 7, 5).translate(0, 0.5, 0), 0.05), key === 'terra' ? earthMat(m.form) : iceMat());
     column.add(body);
     for (let i = 0; i < 3; i++) {                 // shards crowding the base
-      const shard = new THREE.Mesh(craggy(new THREE.ConeGeometry(0.07, 0.4 + Math.random() * 0.25, 5, 2).translate(0, 0.2, 0), 0.03), earthMat(m.form));
+      const shard = new THREE.Mesh(craggy(new THREE.ConeGeometry(0.07, 0.4 + Math.random() * 0.25, 5, 2).translate(0, 0.2, 0), 0.03), key === 'terra' ? earthMat(m.form) : iceMat());
       const ang = Math.random() * 6.28;
       shard.position.set(Math.cos(ang) * 0.16, 0, Math.sin(ang) * 0.16);
       shard.rotation.set(Math.sin(ang) * 0.5, 0, -Math.cos(ang) * 0.5);
@@ -1603,7 +1655,7 @@ function castColumn(key, m, c) {
     const wide = key === 'aero' ? 1 : 1.5;
     body = new THREE.Mesh(
       new THREE.CylinderGeometry(m.top * wide, m.bottom * wide, 1, 28, 12, true).translate(0, 0.5, 0),
-      energyMat(key, { flow: [0, key === 'aero' ? 2.2 : 1.8, 0], fadeY: key === 'aqua' ? 0 : 0.5, cut: key === 'aqua' ? 0.1 : undefined, scale: key === 'aero' ? [5, 1.4, 5] : key === 'aqua' ? [10, 2.2, 10] : [8, 2.6, 8] }),
+      energyMat(lookOf(key, m), { flow: [0, key === 'aero' ? 2.2 : 1.8, 0], fadeY: key === 'aqua' ? 0 : 0.5, cut: key === 'aqua' ? 0.1 : undefined, scale: key === 'aero' ? [5, 1.4, 5] : key === 'aqua' ? [10, 2.2, 10] : [8, 2.6, 8] }),
     );
     column.add(body);
     if (key !== 'aero') {
@@ -1633,7 +1685,7 @@ function castColumn(key, m, c) {
   };
   column.scale.set(pw, 0.001, pw);
   if (m.pulse) firePulse(base);                  // Terra's eruption also ripples the room
-  if (key === 'aqua') addSource(base, axis, c.t, 20);     // where water came up, it keeps coming for a while
+  if (key === 'aqua' && !m.form) addSource(base, axis, c.t, 20);     // where water came up, it keeps coming for a while
   puff(key, base, key === 'terra' ? 40 : 24, 2.4, { up: 2.5, jitter: 0.2 });
   if (key === 'terra') fume(DUST, base, 7, { size: 0.35, jitter: 0.5, rise: 0.5, life: 1.8 });
   const born = c.t;
@@ -1674,9 +1726,9 @@ function castColumn(key, m, c) {
         if (key === 'pyro' || m.form === 'lava') ignite(o, t);
       }
       if (key === 'pyro' || m.form === 'lava') heatAt(base, m.radius + 0.6, t);
-      if (m.stand && key === 'terra') {
+      if (m.stand) {
         endAt = t + m.stand;
-        barrier = addBarrier(new THREE.CylinderGeometry(m.bottom * 0.5 * pw, m.bottom * pw, height, 8).translate(0, height / 2, 0), column, {
+        barrier = addBarrier(new THREE.CylinderGeometry(Math.max(m.bottom, 0.17) * 0.5 * pw, Math.max(m.bottom, 0.17) * pw, height, 8).translate(0, height / 2, 0), column, {
           struck: (dv, k, tt) => crumble(tt),
           crumble: (tt) => crumble(tt),
           reflect: m.form === 'metal',
@@ -1703,7 +1755,7 @@ function castRing(key, m, c) {
   const crest = key === 'pyro' ? 0.55 : key === 'aqua' ? 0.3 : 0.4;
   const rim = new THREE.Mesh(
     new THREE.CylinderGeometry(1, 1, crest, 72, 6, true).translate(0, crest / 2, 0),
-    energyMat(key, { flow: [0, key === 'aqua' ? 0.6 : 1.6, 0], fadeY: true, scale: key === 'aero' ? [3, 9, 3] : [2.2, 5, 2.2], cut: key === 'aqua' ? 0.12 : undefined }),
+    energyMat(lookOf(key, m), { flow: [0, key === 'aqua' ? 0.6 : 1.6, 0], fadeY: true, scale: key === 'aero' ? [3, 9, 3] : [2.2, 5, 2.2], cut: key === 'aqua' ? 0.12 : undefined }),
   );
   rim.position.copy(centre);
   puff(key, centre, 30, 3, { up: 2, jitter: 0.1 });
@@ -1754,11 +1806,11 @@ function castWall(key, m, c) {
   // The wall grows along n, out of whatever surface you are looking at, and faces along d.
   // Floor or table top: an ordinary wall where you looked. A wall of the room: a partition jutting out of it.
   const n = new THREE.Vector3(0, 1, 0), d = flat(aim, c.fwd), centre = new THREE.Vector3();
-  const look = m.passThrough ? null : collide(c.eye, c.eye.clone().addScaledVector(aim, 7));
-  if (look && look.normal.y < 0.6 && Math.abs(aim.dot(look.normal)) < 0.9) {
-    n.copy(look.normal); centre.copy(look.point);
+  const seen = m.passThrough ? null : collide(c.eye, c.eye.clone().addScaledVector(aim, 7));
+  if (seen && seen.normal.y < 0.6 && Math.abs(aim.dot(seen.normal)) < 0.9) {
+    n.copy(seen.normal); centre.copy(seen.point);
     d.copy(aim).addScaledVector(n, -aim.dot(n)).normalize();
-  } else if (look && look.normal.y >= 0.6 && look.point.distanceTo(c.eye) > 1.2) centre.copy(look.point);
+  } else if (seen && seen.normal.y >= 0.6 && seen.point.distanceTo(c.eye) > 1.2) centre.copy(seen.point);
   else centre.copy(c.eye).addScaledVector(d, m.passThrough ? 1.0 : 1.3).setY(0);
   const right = new THREE.Vector3().crossVectors(d, n).normalize();
   const wall = new THREE.Group();
@@ -1776,10 +1828,12 @@ function castWall(key, m, c) {
       sp.setXYZ(i, sp.getX(i), sp.getY(i) * taper - Math.max(u - 0.85, 0) * 0.7, lean);
     }
     sheet.computeVertexNormals();
-    wall.add(new THREE.Mesh(sheet, energyMat(key, { flow: [0, 1.1, 0.4], scale: [5, 7, 5], cut: 0.05 })));
+    wall.add(new THREE.Mesh(sheet, energyMat(lookOf(key, m), { flow: [0, 1.1, 0.4], scale: [5, 7, 5], cut: 0.05 })));
   } else {
     // A slab heaved out of the surface, rough along the top.
-    wall.add(new THREE.Mesh(craggy(new THREE.BoxGeometry(m.width, m.height, 0.22, 9, 6, 2).translate(0, m.height / 2, 0), 0.07), earthMat(m.form)));
+    const slab = craggy(new THREE.BoxGeometry(m.width, m.height, 0.22, 9, 6, 2).translate(0, m.height / 2, 0), 0.07);
+    if (key !== 'terra') slab.computeVertexNormals();
+    wall.add(new THREE.Mesh(slab, key === 'terra' ? earthMat(m.form) : iceMat()));
   }
   puff(key, centre, 36, 2.2, { dir: n, spread: 1, jitter: m.width * 0.8 });
   if (key === 'terra') fume(m.form === 'sand' ? SAND : DUST, centre, 10, { size: 0.4, jitter: m.width, rise: 0.5, life: 2 });
@@ -1960,6 +2014,13 @@ function jagged(a, b, wobble) {
   return out;
 }
 
+function zap(a, b, t) {
+  const eye = viewerPos.clone();
+  const arc = new THREE.Mesh(ribbonGeo(jagged(a, b, 0.08), 0.02, eye), glowMat(new THREE.Color(0xffffff), 1));
+  addLight(b, VOLT_LIGHT, 2, 0.2);
+  puff('volt', b, 10, 2.5, {});
+  addEffect([arc], (n) => { arc.material.opacity = Math.max(1 - (n - t) / 0.18, 0); return n - t < 0.18; });
+}
 // --- beam: instant. Lightning takes the straight path, then jumps between echoes that are close together. ---
 function castBeam(key, m, c) {
   const origin = c.hand.clone();
@@ -2112,6 +2173,27 @@ function cast(key, gesture, c) {
     m = { ...m, form: terraForm };
     if (terraForm === 'sand') { m.damage = 1; if (m.kind === 'bolt') m.pierce = true; }
     if (terraForm === 'metal' && m.kind === 'bolt') m.bounces = (m.bounces || 0) + 2;
+  }
+  const form = key === 'terra' ? null : forms[key];
+  if (form && form !== FORMS[key][0]) {
+    m = { ...m, form };
+    if (form === 'ice') {
+      m.freeze = true;
+      if (m.shape === 'blob') m.shape = 'shard';
+      if (m.kind === 'wall') { m.passThrough = false; m.stand = 20; }     // a wall of ice stays where you raise it
+      if (m.kind === 'column') m.stand = 12;
+    }
+    if (form === 'steam') m.steam = true;
+    if (form === 'lightning') { m.volt = true; if (m.kind === 'bolt') m.speed *= 1.6; }
+    if (form === 'blast') { m.noBurn = true; if (m.kind === 'bolt' && !m.blast) m.blast = 0.8; }
+    if (form === 'vacuum') m.from = c.eye.clone();
+    if (form === 'sound') m.sonic = true;
+  }
+  if (key === 'aqua' && gesture === 'charge') {      // everything you gathered goes in one throw
+    m = { ...m, damage: 1 + Math.floor(water.amount / 2), splash: 1 + water.amount * 0.25 };
+    c.scale = 1 + water.amount * 0.3;
+    if (water.amount > 0.3) c.hand = water.pos.clone();
+    water.amount = 0;
   }
   if (key === 'aqua' && water.amount >= 1) {         // carried water: the move leaves from it, and is the stronger for it
     water.amount -= 1;
@@ -2280,8 +2362,33 @@ function sendBack(o, speed) {
 // A hostile shard that you have touched with anything is yours now, and hits harder going back.
 function turn(o) { if (o.hostile) { o.hostile = false; o.turned = true; } }
 
+// A lot of water landing at once: soaks and knocks what is near, and leaves the place wet.
+function splash(point, t, radius) {
+  const centre = point.clone();
+  puff('aqua', centre, 90, radius * 3.5, { up: 2.5 });
+  thump();
+  const under = nearestRoomSurface(centre, 2.5);
+  addSource(under ? under.point : centre.clone().setY(0), under ? under.normal : UP, t, 25);
+  for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(centre) < radius) hit(e, 'aqua', t, e.group.position.clone().sub(centre).normalize(), { damage: 1, kind: 'wall' });
+  for (const o of objects) {
+    if (o.dead || o.held || o.def.cloud || o.pos.distanceTo(centre) > radius * 1.2) continue;
+    const away = o.pos.clone().sub(centre).normalize();
+    kick(o, away.x * 4, 2, away.z * 4);
+    if (o.burnUntil > 0) o.burnUntil = -1;         // and puts out what was burning
+  }
+}
+// A boulder coming down: the ground jumps, loose things with it.
+function quake(point, t, radius) {
+  const centre = point.clone();
+  firePulse(centre);
+  puff('terra', centre, 60, 3.2, { up: 2.5 });
+  fume(DUST, centre, 12, { size: 0.45, jitter: radius, rise: 0.6, life: 2.2 });
+  for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(centre) < radius) hit(e, 'terra', t, UP, { damage: 1, launch: true });
+  for (const o of objects) if (!o.dead && !o.held && !o.def.cloud && o.pos.distanceTo(centre) < radius * 1.3) kick(o, 0, 5, 0);
+  spawnObject('stone', centre.clone().setY(Math.max(centre.y, 0.2)));
+}
 // A blast: hurts echoes, throws objects, lights what can burn.
-function explode(point, key, radius, t, dmg) {
+function explode(point, key, radius, t, dmg, noBurn = false) {
   const centre = point.clone();
   const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), energyMat('pyro', { scale: [4, 4, 4], flow: [0, 0.6, 0], cut: 0.22 }));
   ball.position.copy(centre);
@@ -2297,7 +2404,7 @@ function explode(point, key, radius, t, dmg) {
     return k < 1;
   });
   for (const e of echoes) {
-    if (isLive(e, t) && e.group.position.distanceTo(centre) < radius) hit(e, key, t, e.group.position.clone().sub(centre).normalize(), { damage: dmg });
+    if (isLive(e, t) && e.group.position.distanceTo(centre) < radius) hit(e, key, t, e.group.position.clone().sub(centre).normalize(), { damage: dmg, noBurn });
   }
   for (const o of objects) {
     if (o.dead || o.held) continue;
@@ -2511,7 +2618,7 @@ waterBlob.visible = false; waterBlob.renderOrder = 17;
 scene.add(waterBlob);
 const _ws = new THREE.Vector3(), _wv = new THREE.Vector3();
 // anchor: where the carried water wants to float (beside the leading hand). Null when Aqua is not in use.
-function updateWater(t, dt, anchor) {
+function updateWater(t, dt, anchor, boost = false) {
   for (let i = sources.length - 1; i >= 0; i--) {
     const s = sources[i];
     const left = s.until - t;
@@ -2527,8 +2634,10 @@ function updateWater(t, dt, anchor) {
   }
   let near = null, nearDist = 14;
   for (const s of sources) { const d = s.pos.distanceTo(anchor); if (d < nearDist) { nearDist = d; near = s; } }
-  if (near && water.amount < WATER_MAX) {
-    water.amount = Math.min(water.amount + dt / WATER_FILL, WATER_MAX);
+  const cap = boost ? WATER_MAX * 2 : WATER_MAX;
+  if (!near && boost && water.amount < 2) water.amount = Math.min(water.amount + dt * 0.6, 2);   // wrung out of the air: slow, and not much
+  if (near && water.amount < cap) {
+    water.amount = Math.min(water.amount + dt / WATER_FILL * (boost ? 2.5 : 1), cap);
     for (let i = 0; i < 3; i++) {                   // the stream: drops leaving the source and arcing to you
       _wv.copy(water.pos).sub(near.pos);
       const flight = 0.55;
@@ -2542,7 +2651,7 @@ function updateWater(t, dt, anchor) {
   water.pos.lerp(anchor, Math.min(dt * 5, 1));      // it lags and swings behind the hand like something with weight
   waterBlob.visible = water.amount > 0.05;
   waterBlob.position.copy(water.pos);
-  waterBlob.scale.setScalar(0.028 + 0.022 * water.amount);
+  waterBlob.scale.setScalar(0.028 + 0.022 * Math.min(water.amount, 3) + 0.012 * Math.max(water.amount - 3, 0));
 }
 
 // A whip of water: one long lash that sweeps across in front of you.
@@ -2801,19 +2910,49 @@ const chargeOrbs = [0, 1].map(() => {
   scene.add(g);
   return g;
 });
-const CHARGE_MIN = 0.6, CHARGE_MAX = 1.6;
-function showCharge(i, pos, charge) {
+// Terra gathers rock into the fist; Aero winds air into a ball. (Aqua's charge is the carried water itself.)
+const rockOrbs = [0, 1].map(() => {
+  const m = new THREE.Mesh(craggy(new THREE.IcosahedronGeometry(1, 1), 0.3), stoneMat());
+  m.visible = false; scene.add(m);
+  return m;
+});
+const windOrbs = [0, 1].map(() => {
+  const g = new THREE.Group();
+  for (let k = 0; k < 2; k++) {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(1, 0.22, 8, 36), energyMat('aero', { flow: [1.4, 0, 0], scale: [3, 9, 3], cut: 0.36 }));
+    band.rotation.set(k * 1.4, k * 0.8, 0);
+    g.add(band);
+  }
+  g.visible = false; g.renderOrder = 16; scene.add(g);
+  return g;
+});
+const CHARGE_MIN = 0.6, CHARGE_MAX = 1.6, CHARGE_REACH = 0.45;   // a fist closer to you than this charges; further out, it grabs
+let waterBoost = null;                            // where a charging Aqua fist is, while it is charging
+function showCharge(i, pos, charge, key = 'pyro') {
+  const k = Math.min(charge / CHARGE_MAX, 1);
+  rockOrbs[i].visible = key === 'terra' && charge > 0.2;
+  windOrbs[i].visible = key === 'aero' && charge > 0.2;
+  if (rockOrbs[i].visible) {
+    rockOrbs[i].position.copy(pos); rockOrbs[i].scale.setScalar(0.03 + 0.07 * k); rockOrbs[i].rotation.y += 0.05;
+    if (Math.random() < 0.3) puff('terra', pos, 1, 0.6, { jitter: 0.2 });
+  }
+  if (windOrbs[i].visible) {
+    windOrbs[i].position.copy(pos); windOrbs[i].scale.setScalar(0.03 + 0.08 * k);
+    windOrbs[i].children.forEach((b, n) => { b.rotation.z += (n ? -0.5 : 0.4); });
+  }
+  if (key === 'aqua' && charge > 0.1) waterBoost = pos;
   const g = chargeOrbs[i];
-  g.visible = charge > 0.2;
+  g.visible = key === 'pyro' && charge > 0.2;
   if (!g.visible) return;
   g.position.copy(pos);
   g.scale.setScalar(0.03 + 0.06 * Math.min(charge / CHARGE_MAX, 1));
   if (charge > CHARGE_MIN && Math.random() < 0.5) puff('pyro', pos, 1, 0.6, { up: 1 });
   lightNow(pos, FIRE_LIGHT, 0.5 * Math.min(charge / CHARGE_MAX, 1));
 }
-function throwFireball(hand, dir, eye, fwd, charge, t) {
-  cast('pyro', 'grip', { hand, dir, eye, fwd, t, scale: 1 + Math.min(charge, CHARGE_MAX) });
+function throwCharged(key, hand, dir, eye, fwd, charge, t) {
+  cast(key, 'charge', { hand, dir, eye, fwd, t, scale: 1 + Math.min(charge, CHARGE_MAX) * (key === 'pyro' ? 1 : 0.6) });
 }
+const throwFireball = (hand, dir, eye, fwd, charge, t) => throwCharged('pyro', hand, dir, eye, fwd, charge, t);
 
 // ---------- senses ----------
 // Each one fills the whole room and tells you something different.
@@ -2906,7 +3045,7 @@ const CHI_COOL = new THREE.Color(0x8a1a05), CHI_HOT = new THREE.Color(0xffc24a);
 const held = { aqua: null, pyro: null };   // set each frame by whoever is holding a sense
 const _amb = new THREE.Color();
 
-function updateHeldSenses(t) {
+function updateHeldSenses(t, heldDt = 0.016) {
   // Tide
   const a = held.aqua;
   if (a) {
@@ -2940,7 +3079,7 @@ function updateHeldSenses(t) {
     _amb.setRGB(0.16, 0.045, 0.01);
     for (const e of echoes) if (!e.down) reveal(e, t, HOLD_REVEAL, ELEMENTS.pyro.color);
   }
-  pulseUniforms.uAmbient.value.lerp(_amb, 0.12);
+  pulseUniforms.uAmbient.value.lerp(_amb, Math.min(heldDt * 9, 1));   // by the clock, so it fades the same at any frame rate
   let g = 0;
   if (p) {
     for (const o of objects) {
@@ -2963,15 +3102,20 @@ function updateHeldSenses(t) {
 }
 
 // ---------- discipline selection ----------
-function cycleForm() {
-  terraForm = TERRA_FORMS[(TERRA_FORMS.indexOf(terraForm) + 1) % TERRA_FORMS.length];
-  for (const el of chipEls) if (el.dataset.el === 'terra') el.textContent = terraForm === 'rock' ? 'Terra' : `Terra · ${terraForm}`;
+function setForm(key, form) {
+  if (key === 'terra') terraForm = form; else forms[key] = form;
+  const name = ELEMENTS[key].label[0] + ELEMENTS[key].label.slice(1).toLowerCase();
+  for (const el of chipEls) if (el.dataset.el === key) el.textContent = form === FORMS[key][0] ? name : `${name} · ${form}`;
+}
+function cycleForm(key = 'terra') {
+  const list = FORMS[key];
+  setForm(key, list[(list.indexOf(formOf(key)) + 1) % list.length]);
   tick();
-  hudNote = `earth as ${terraForm}`; lastCast = 'terra';
+  hudNote = `${ELEMENTS[key].label.toLowerCase()} as ${formOf(key)}`; lastCast = key;
   drawHud();
 }
 function selectElement(key, quiet) {
-  if (selected === key && key === 'terra' && !quiet) { cycleForm(); return; }
+  if (selected === key && !quiet) { cycleForm(key); return; }
   if (selected === key && quiet) return;
   selected = key;
   lastCast = key;
@@ -3095,10 +3239,10 @@ function drawHud() {
   c.fillStyle = accent;
   c.font = '600 58px ui-monospace, Menlo, Consolas, monospace';
   c.fillText(ELEMENTS[selected].label, 34, 68);
-  if (selected === 'terra' && terraForm !== 'rock') {   // which earth
+  if (formOf(selected) !== FORMS[selected][0]) {      // which sub-element
     const w = c.measureText(ELEMENTS[selected].label).width;
     c.font = '30px ui-monospace, Menlo, Consolas, monospace';
-    c.fillText(terraForm, 46 + w, 74);
+    c.fillText(formOf(selected), 46 + w, 74);
     c.font = '600 58px ui-monospace, Menlo, Consolas, monospace';
   }
   c.fillStyle = '#b6ff3c';
@@ -3243,7 +3387,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
   }
   menuGroup.visible = !!menuHand;
   reticles[0].visible = reticles[1].visible = false;
-  chargeOrbs[0].visible = chargeOrbs[1].visible = false;
+  for (const set of [chargeOrbs, rockOrbs, windOrbs]) set[0].visible = set[1].visible = false;
   if (menuHand) {
     const pointer = menuHand === L ? R : L;
     let touching = -1;
@@ -3260,12 +3404,12 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
       if (pointer.valid && pointer.hasTip && pointer.indexTip.distanceTo(sw.position) < 0.022) touching = 4 + i;
     });
     // A poke counts once: the finger has to come off the orbs before it can pick again.
-    // Poking the discipline you are already in does nothing, except Terra, which steps to its next form.
+    // Poking the discipline you are already in steps it to its next sub-element.
     if (touching < 0) menuArmed = true;
     else if (menuArmed && t - lastMenuPick > 0.25) {
       menuArmed = false; lastMenuPick = t;
       if (touching >= 4) flipSwitch(touching - 4);
-      else if (ELEMENT_ORDER[touching] !== selected || selected === 'terra') selectElement(ELEMENT_ORDER[touching]);
+      else selectElement(ELEMENT_ORDER[touching]);        // picking the one you are in steps to its next sub-element
     }
   }
 
@@ -3331,19 +3475,18 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
         st.aim = findGrabTarget(selected, viewerPos, reachDir, t);
         st.aimT = t;
         showReticle(idx, st.aim, selected, viewerPos);
-      } else if (isFist && st.aim && t - st.aimT < 0.35 && st.speed < 0.9) {
+      } else if (isFist && st.aim && t - st.aimT < 0.35 && st.speed < 0.9 && reachNow >= CHARGE_REACH) {
         beginHold(st, selected, st.aim, viewerPos, t);
         st.hold.reach0 = reachNow || 1;
         st.aim = null; st.ready = false;
         continue;
       }
-      st.charge = 0;
-    } else {
-      // Pyro: a raised fist that stays closed builds a fireball; the next punch throws it.
-      if (isFist && st.palm.y > viewerPos.y - 0.5) st.charge = Math.min(st.charge + dt, CHARGE_MAX);
-      else if (!isFist) st.charge = 0;
-      showCharge(idx, st.knuckle, st.charge);
     }
+    // Charging: a raised fist that stays closed builds the discipline's big throw; the next punch lets it go.
+    // Pyro charges at any reach. The others charge with the fist drawn in toward you, so it cannot be mistaken for a grab.
+    if (isFist && st.palm.y > viewerPos.y - 0.5 && (selected === 'pyro' || reachNow < CHARGE_REACH)) st.charge = Math.min(st.charge + dt, CHARGE_MAX);
+    else if (!isFist) st.charge = 0;
+    showCharge(idx, st.knuckle, st.charge, selected);
 
     // Held senses: Aqua reads through a raised open palm, Pyro through a raised fist.
     const raised = st.palm.y > viewerPos.y - 0.5;
@@ -3363,8 +3506,8 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
         else if (gesture === 'shove') { c.hand = st.palm.clone(); c.dir = st.normal.clone(); }
         else if (gesture === 'point') { c.hand = st.indexTip.clone(); c.dir = st.pointDir.clone(); }
         else { c.hand = st.palm.clone(); c.dir = _fwd.clone(); }   // lift and sweep aim where you look
-        if (gesture === 'punch' && selected === 'pyro' && st.charge > CHARGE_MIN) {
-          throwFireball(c.hand, c.dir, c.eye, c.fwd, st.charge, t);
+        if (gesture === 'punch' && st.charge > CHARGE_MIN) {
+          throwCharged(selected, c.hand, c.dir, c.eye, c.fwd, st.charge, t);
           st.charge = 0;
           continue;
         }
@@ -3460,6 +3603,7 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   const dir = aimPoint.clone().sub(hand).normalize();
   const fwd = flat(aim);
 
+  if (previewGesture === 'charge') { previewAim.copy(aim); previewGrip.chargeFrom = t; return; }
   if (previewGesture === 'grip') {
     previewAim.copy(aim);
     if (selected === 'pyro') { previewGrip.chargeFrom = t; return; }
@@ -3503,7 +3647,7 @@ const releasePreview = () => {
     if (charge > 0.3) {
       const hand = camera.position.clone().add(new THREE.Vector3(0.25, -0.3, -0.35).applyQuaternion(camera.quaternion));
       const tgt = camera.position.clone().addScaledVector(previewAim, 4);
-      throwFireball(hand, tgt.sub(hand).normalize(), camera.position.clone(), flat(previewAim), charge, t);
+      throwCharged(selected, hand, tgt.sub(hand).normalize(), camera.position.clone(), flat(previewAim), charge, t);
     }
   }
 };
@@ -3522,7 +3666,7 @@ for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); se
 window.addEventListener('keydown', (ev) => {
   const i = '1234'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
-  const g = 'qwertyui'.indexOf(ev.key.toLowerCase());
+  const g = 'qwertyuio'.indexOf(ev.key.toLowerCase());
   if (g >= 0) selectGesture(GESTURES[g]);
 });
 
@@ -3635,17 +3779,17 @@ renderer.setAnimationLoop((ms, frame) => {
     camera.lookAt(0, 0.9, 0);
     viewerPos.copy(camera.position);
     if (!demoFired && t > 1.2) { demoFired = true; firePulse(new THREE.Vector3(-0.9, 0.74, -0.6)); }
-    if (previewGesture === 'grip') {
+    if (previewGesture === 'grip' || previewGesture === 'charge') {
       const hand = camera.position.clone().add(new THREE.Vector3(0.25, -0.3, -0.35).applyQuaternion(camera.quaternion));
       reticles[1].visible = chargeOrbs[1].visible = false;
       if (previewGrip.hold) {
         reticles[0].visible = false;
         updateHold(previewGrip, camera.position, previewAim, 1, { hand, squeeze: previewGrip.squeeze, squeezeEdge: previewGrip.squeeze && !previewGrip.prevSqueeze }, t, dt);
-      } else if (selected !== 'pyro') showReticle(0, findGrabTarget(selected, camera.position, previewAim, t), selected, camera.position);
+      } else if (selected !== 'pyro' && previewGesture === 'grip') showReticle(0, findGrabTarget(selected, camera.position, previewAim, t), selected, camera.position);
       else reticles[0].visible = false;
-      showCharge(0, hand, previewGrip.chargeFrom >= 0 ? t - previewGrip.chargeFrom : 0);
+      showCharge(0, hand, previewGrip.chargeFrom >= 0 ? t - previewGrip.chargeFrom : 0, selected);
       previewGrip.prevSqueeze = previewGrip.squeeze;
-    } else { reticles[0].visible = false; chargeOrbs[0].visible = false; }
+    } else { reticles[0].visible = false; chargeOrbs[0].visible = rockOrbs[0].visible = windOrbs[0].visible = false; }
     if (previewHold) {
       if (t > previewHold.until) previewHold = null;
       else if (previewHold.kind === 'aqua') held.aqua = { origin: camera.position, dir: previewHold.dir };
@@ -3657,8 +3801,10 @@ renderer.setAnimationLoop((ms, frame) => {
     waterAnchorOn = selected === 'aqua';
     waterAnchor.copy(camera.position).add(_off.set(0.3, -0.18, -0.45).applyQuaternion(camera.quaternion));
   }
-  updateWater(t, dt, waterAnchorOn ? waterAnchor : null);
-  updateHeldSenses(t);
+  if (waterBoost && selected === 'aqua') { waterAnchorOn = true; waterAnchor.copy(waterBoost).add(_off.set(0, 0.1, 0)); }
+  updateWater(t, dt, waterAnchorOn ? waterAnchor : null, !!waterBoost && selected === 'aqua');
+  waterBoost = null;
+  updateHeldSenses(t, dt);
   updateObjects(t, dt);
   updateEchoes(t, dt, viewerPos);
   tuneDetail(t, dt);
@@ -3677,9 +3823,9 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
-  objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
+  objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, throwCharged, kick,
   barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit, sources, addSource, water,
-  cycleForm, get form() { return terraForm; }, setForm(f) { terraForm = f; }, lights, KINDS, options, flipSwitch,
+  cycleForm, get form() { return terraForm; }, setForm(f) { setForm('terra', f); }, forms, setFormOf: setForm, formOf, lights, KINDS, options, flipSwitch,
   get wave() { return wave; }, set wave(n) { wave = n; }, get active() { return activeCount; }, get detail() { return detail; },
   spawnCloud, smoke, ignite,
   get hp() { return playerHP; }, attackSoon() { nextAttackAt = 0; },

@@ -195,3 +195,18 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
 - **Your constructs move.** An open-palm shove at a wall you raised (in the same discipline) slides it 1.6 m and hits
   what it passes through. A punch still breaks it loose.
 - **Ceilings.** Water sources on a ceiling rain: what stands under them is soaked and fires below go out.
+
+## Build 11: the wheel, Necro, familiars, shortcuts
+
+- **Power wheel.** The palm menu is now a ring of beads round the palm. Hover a fingertip near one and the plate in
+  the middle names it and lists what it does; touch to take it. Under the plate are the current discipline's
+  sub-elements as labelled chips: touch one to switch straight to it. Switches sit below the ring, toward the wrist.
+- **Shortcuts.** Thumb to middle finger (on an open hand): back to the previous discipline. Thumb to ring finger:
+  next sub-element. `Tab` in the preview swaps back.
+- **Necro.** Bone Shard, Wail, Grasp (a hand from the floor that holds), Reap, Graveyard, Doom (three more hits land
+  by themselves), Legion (charged: three thralls). Anything Necro kills rises as a thrall that hunts the nearest
+  creature, bites it, and takes shards for you. Four at a time. Forms bone, plague, spirit.
+- **Summoning circles.** Pinch and draw a closed loop instead of a line and the discipline's familiar appears in it,
+  using that discipline's basic attack in your current sub-element: Ember Wisp, Stone Sentry, Cyclone (roams),
+  Sun Mote (follows you), Moon (orbits you), Guide Star (climbs high), Shade (follows you). Flora grows a snapper on
+  the nearest surface; Necro raises two thralls. Two familiars at a time, 22 seconds each.

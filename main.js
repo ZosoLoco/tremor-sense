@@ -92,12 +92,13 @@ const ELEMENTS = {
   astra:  { label: 'ASTRA',  sense: 'Zenith Sense', color: new THREE.Color(0x9fb8ff) },  // sky: everything comes down from above
   morph:  { label: 'MORPH',  sense: 'Pulse Sense', color: new THREE.Color(0xff7a8a) },   // the body itself: close, hard, armoured
   umbra:  { label: 'UMBRA',  sense: 'Dark Sense',  color: new THREE.Color(0xd24cff) },   // dark: blinds, drains, hides you
+  necro:  { label: 'NECRO',  sense: 'Death Sense', color: new THREE.Color(0x6cf0c2) },   // the dead: what it kills gets up and fights for you
 };
-const ELEMENT_ORDER = ['pyro', 'aqua', 'terra', 'aero', 'lumen', 'gravis', 'flora', 'astra', 'morph', 'umbra'];
+const ELEMENT_ORDER = ['pyro', 'aqua', 'terra', 'aero', 'lumen', 'gravis', 'flora', 'astra', 'morph', 'umbra', 'necro'];
 const GRABS = { aqua: true, terra: true, aero: true, gravis: true, flora: true, morph: true };   // disciplines whose closed fist takes hold of things
 const HOLD_AS = { gravis: 'aero', morph: 'aero', flora: 'aqua' };     // gravity and muscle hold objects the way wind does; vines hold anything, the way water does
 const holdKey = (k) => HOLD_AS[k] || k;
-const FIST_SENSE = { pyro: true, gravis: true, morph: true, umbra: true };   // sensed through a raised fist
+const FIST_SENSE = { pyro: true, gravis: true, morph: true, umbra: true, necro: true };   // sensed through a raised fist
 const PALM_SENSE = { lumen: true, astra: true };                             // sensed through a raised open palm
 const TOUCH_SENSE = { terra: true, flora: true };                            // sensed through a palm on a surface
 // Terra works four kinds of earth. Pick Terra again while it is already selected to step to the next.
@@ -136,8 +137,10 @@ let terraForm = 'rock';
 //   Umbra shade     blinds 4 s and drains.   fear  no drain; throws them back and they cannot act for 5 s.
 //         hollow    no blind; what dies to it gives you a point of health.
 const FORMS = { terra: TERRA_FORMS, pyro: ['flame', 'lightning', 'blast'], aqua: ['water', 'ice', 'steam'], aero: ['wind', 'vacuum', 'sound'], lumen: ['light', 'prism', 'shadow'], gravis: ['pull', 'float', 'crush'],
-  flora: ['vine', 'thorn', 'spore'], astra: ['day', 'night', 'storm'], morph: ['beast', 'shell', 'venom'], umbra: ['shade', 'fear', 'hollow'] };
-const forms = { pyro: 'flame', aqua: 'water', aero: 'wind', lumen: 'light', gravis: 'pull', flora: 'vine', astra: 'day', morph: 'beast', umbra: 'shade' };
+  flora: ['vine', 'thorn', 'spore'], astra: ['day', 'night', 'storm'], morph: ['beast', 'shell', 'venom'], umbra: ['shade', 'fear', 'hollow'],
+  //   Necro bone  as written.   plague  hits poison, and thralls last twice as long.   spirit  shots pass through walls.
+  necro: ['bone', 'plague', 'spirit'] };
+const forms = { pyro: 'flame', aqua: 'water', aero: 'wind', lumen: 'light', gravis: 'pull', flora: 'vine', astra: 'day', morph: 'beast', umbra: 'shade', necro: 'bone' };
 const formOf = (key) => key === 'terra' ? terraForm : forms[key];
 // Which set of colours a move is drawn in.
 const lookOf = (key, m) => m && m.form === 'lightning' ? 'volt' : key;
@@ -244,6 +247,16 @@ const MOVES = {
     point: { name: 'Hex',         kind: 'beam',   range: 12, straight: true, chain: 1 },
     grip:  { name: 'Black Sun (hold)', kind: 'bolt', speed: 6, radius: 0.4, shape: 'orb', size: 0.1, implode: 2.2, damage: 2, life: 2.5 },
     charge: { name: 'Black Sun',  kind: 'bolt',   speed: 6, radius: 0.4, shape: 'orb', size: 0.1, implode: 2.2, damage: 2, life: 2.5 },
+  },
+  necro: {
+    punch: { name: 'Bone Shard',  kind: 'bolt',   speed: 16, radius: 0.2, shape: 'bone', pierce: true },
+    shove: { name: 'Wail',        kind: 'cone',   range: 5, angle: 0.9, fear: true },
+    lift:  { name: 'Grasp',       kind: 'column', radius: 0.3, top: 0.1, bottom: 0.16, sides: 5, root: 3 },      // a hand out of the floor: it holds what it catches
+    sweep: { name: 'Reap',        kind: 'whip',   range: 3, arc: 1.3, damage: 2 },
+    slam:  { name: 'Graveyard',   kind: 'ring',   maxR: 3.5, height: 1.4, summon: 1 },                          // and one of the dead gets up where you struck
+    point: { name: 'Doom',        kind: 'beam',   range: 12, straight: true, doom: true },                       // marked: three more hits land by themselves
+    grip:  { name: 'Legion (hold)', kind: 'legion', count: 3 },
+    charge: { name: 'Legion',     kind: 'legion', count: 3 },
   },
 };
 
@@ -620,6 +633,23 @@ Object.assign(SFX, {
     sense:  [['t', 73, 73, 1.4, 0.3], ['t', 75, 75, 1.4, 0.28]],
   },
 });
+//   Necro rattles and moans: hollow triangles a tritone apart, dry clicks.
+SFX.necro = {
+  punch:  [['n', 'bandpass', 3000, 1800, 0.05, 0.3, 4, 0, 0.002], ['t', 622, 440, 0.12, 0.12, 'triangle']],
+  shove:  [['t', 440, 311, 0.9, 0.14, 'sawtooth'], ['t', 622, 440, 0.9, 0.1, 'sawtooth'], ['n', 'bandpass', 900, 500, 0.9, 0.12, 5, 0, 0.3]],
+  lift:   [['n', 'bandpass', 2400, 1200, 0.05, 0.3, 4, 0, 0.002], ['n', 'bandpass', 2000, 1000, 0.05, 0.3, 4, 0.08, 0.002], ['n', 'bandpass', 1700, 900, 0.05, 0.3, 4, 0.16, 0.002], ['t', 110, 78, 0.5, 0.25, 'triangle']],
+  sweep:  [['n', 'bandpass', 3000, 700, 0.3, 0.22, 3, 0, 0.004], ['t', 311, 220, 0.3, 0.14, 'triangle']],
+  slam:   [['t', 78, 55, 1.1, 0.45, 'triangle'], ['t', 110, 78, 1.1, 0.3, 'triangle'], ['n', 'bandpass', 2200, 1100, 0.06, 0.3, 4, 0.3, 0.002], ['n', 'bandpass', 1800, 900, 0.06, 0.3, 4, 0.5, 0.002]],
+  point:  [['t', 220, 220, 0.8, 0.14, 'triangle'], ['t', 311, 311, 0.8, 0.12, 'triangle'], ['t', 110, 110, 0.9, 0.2]],
+  charge: [['t', 155, 220, 0.6, 0.2, 'sawtooth'], ['t', 220, 311, 0.6, 0.15, 'sawtooth', 0.15], ['t', 311, 440, 0.6, 0.12, 'sawtooth', 0.3], ['n', 'bandpass', 2000, 1000, 0.06, 0.3, 4, 0.6, 0.002]],
+  grip:   [['t', 155, 220, 0.6, 0.2, 'sawtooth'], ['t', 220, 311, 0.6, 0.15, 'sawtooth', 0.15]],
+  draw:   [['n', 'bandpass', 2400, 1200, 0.05, 0.3, 4, 0, 0.002], ['n', 'bandpass', 2200, 1100, 0.05, 0.3, 4, 0.1, 0.002], ['n', 'bandpass', 2000, 1000, 0.05, 0.3, 4, 0.2, 0.002], ['n', 'bandpass', 1800, 900, 0.05, 0.3, 4, 0.3, 0.002]],
+  sense:  [['t', 155, 155, 1.3, 0.14, 'triangle'], ['t', 220, 220, 1.3, 0.1, 'triangle']],
+  rise:   [['t', 110, 220, 0.5, 0.2, 'sawtooth'], ['n', 'bandpass', 2000, 1000, 0.06, 0.3, 4, 0.35, 0.002]],
+  bite:   [['n', 'bandpass', 2600, 1300, 0.04, 0.3, 4, 0, 0.002], ['t', 180, 120, 0.08, 0.2, 'square']],
+};
+SFX.summon = [['t', 262, 523, 0.5, 0.14, 'triangle'], ['t', 392, 784, 0.5, 0.1, 'triangle', 0.1], ['n', 'highpass', 3000, 6000, 0.5, 0.08, 0.7, 0.1, 0.2]];
+SFX.swap = [['t', 600, 900, 0.07, 0.12, 'triangle']];
 SFX.guard = [['t', 300, 600, 0.15, 0.2, 'triangle'], ['n', 'bandpass', 1500, 2500, 0.2, 0.15, 3]];
 SFX.guardHit = [['t', 700, 500, 0.1, 0.2, 'triangle'], ['n', 'highpass', 4000, 3000, 0.06, 0.25, 0.7, 0, 0.002]];
 SFX.quench = [['n', 'highpass', 2500, 7000, 0.7, 0.25, 0.7, 0, 0.02]];
@@ -682,6 +712,7 @@ const castSound = {
   astra: () => tone(1200, 400, 0.4, 0.12, 'triangle'),
   morph: () => tone(180, 70, 0.2, 0.4, 'square'),
   umbra: () => tone(196, 98, 0.6, 0.25, 'sine'),
+  necro: () => tone(311, 155, 0.5, 0.2, 'triangle'),
 };
 
 // ---------- room surfaces ----------
@@ -1170,7 +1201,12 @@ function hit(e, key, t, dir, m = {}) {
     else if (!frozen && !soaked) e.burnAt = t + 1.5;
     if (m.volt && (soaked || e.metalUntil > t)) { dmg = 9; note = 'conduct'; }
   }
-  if (key === 'morph' && m.venom) { e.drainAt = t + 1.2; e.venom = 1; note = note || 'poisoned'; }
+  if ((key === 'morph' || key === 'necro') && m.venom) { e.drainAt = t + 1.2; e.venom = 1; note = note || 'poisoned'; }
+  if (key === 'necro') {
+    if (m.doom) { e.drainAt = t + 1.2; e.venom = 2; note = note || 'doomed'; }
+    if (m.root && !frozen) { e.rootedUntil = t + m.root; e.vel.set(0, e.vel.y, 0); note = note || 'held by the dead'; }
+    if (m.fear) { e.blindUntil = t + 4; note = note || 'terror'; }
+  }
   if (key === 'umbra') {
     if (m.fear) { e.blindUntil = t + 5; _hd.copy(pos).sub(viewerPos).setY(0).normalize(); e.vel.x += _hd.x * 5; e.vel.z += _hd.z * 5; note = note || 'terror'; }
     else if (!m.hollow) { e.blindUntil = t + 4; e.drainAt = t + 1.5; }
@@ -1217,6 +1253,7 @@ function hit(e, key, t, dir, m = {}) {
   if (m.form === 'blast' && m.kind && m.kind !== 'bolt') explode(e.group.position.clone(), 'pyro', 0.7, t, 1, true);
   if (note) { hudNote = note; drawHud(); }
   if (e.hp > 0 && m.blood) puff('morph', pos, 20, 2.5, { up: 1 });
+  if (e.hp <= 0 && key === 'necro') raiseThrall(pos.clone(), t);        // what Necro kills gets back up, on your side
   if (e.hp <= 0 && ((key === 'umbra' && m.hollow) || key === 'morph') && playerHP < 5) { playerHP++; hudNote = 'fed'; drawHud(); }   // the body, and the hollow dark, take back what they kill
   if (e.hp > 0) { e.flashT = t; tick(); puff(key, pos, 8, 1.6); return; }
 
@@ -1476,6 +1513,7 @@ const ENERGY = {
   astra:  { a: 0xffffff, b: 0x8fa8ff, c: 0x1a2a7a, scale: [12, 12, 12], speed: 2.2, cut: 0.42, soft: 0.2 },
   morph:  { a: 0xffe0d8, b: 0xd8485c, c: 0x4a0a18, scale: [6, 6, 6], speed: 2, cut: 0.3, soft: 0.35 },
   umbra:  { a: 0xd9a8ff, b: 0x6a12b8, c: 0x0c0218, scale: [5, 5, 5], speed: 1.8, cut: 0.34, soft: 0.4 },
+  necro:  { a: 0xeafff4, b: 0x3fd69e, c: 0x06301f, scale: [9, 4, 9], speed: 1.0, cut: 0.36, soft: 0.3 },
 };
 // flow is the direction the pattern travels, in the mesh's own space. fadeY (0 to 1) thins it out toward the top of the mesh.
 // Water: mostly clear. You see it by its edges, its highlights and the light moving inside it, not by a colour.
@@ -1717,6 +1755,7 @@ const PCOL = {
   astra: [0xffffff, 0xc9d6ff, 0x7f9cff].map(c => new THREE.Color(c)),
   morph: [0xffd0c8, 0xff7a8a, 0xb02a44].map(c => new THREE.Color(c)),
   umbra: [0xd9a8ff, 0x9a3cff, 0x4a0a8a].map(c => new THREE.Color(c)),
+  necro: [0xeafff4, 0x6cf0c2, 0x1f8a60].map(c => new THREE.Color(c)),
 };
 // How each discipline's loose matter behaves once it is in the air.
 PCOL.volt = [0xffffff, 0xcfe0ff, 0x7f9cff].map(c => new THREE.Color(c));
@@ -1732,6 +1771,7 @@ const PSTYLE = {
   astra: { size: 0.02,  life: 0.5,  grav: 3,    drag: 0.5 },   // sparks fall
   morph: { size: 0.03,  life: 0.35, grav: 5,    drag: 1 },
   umbra: { size: 0.034, life: 0.7,  grav: -0.6, drag: 2 },     // smoke lifts
+  necro: { size: 0.026, life: 0.9,  grav: -0.3, drag: 3 },     // wisps hang and rise
 };
 const _pv = new THREE.Vector3(), _pp = new THREE.Vector3();
 // n particles from a point. dir + spread aims them; without dir they go every way.
@@ -1827,6 +1867,8 @@ function boltMesh(key, m, color) {
     const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 24, 18), waterMat({ flow: [0, 0, -1.2], scale: [9, 9, 9], amp: s * 0.5, body: 0.08 }));
     blob.geometry.scale(1, 1, 1.5);
     g.add(blob);
+  } else if (m.shape === 'bone') {
+    g.add(new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.28, 4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xeafff4 })));
   } else if (m.shape === 'fist') {
     const bone = new THREE.Mesh(craggy(new THREE.BoxGeometry(0.2, 0.18, 0.24, 2, 2, 2), 0.025), new THREE.MeshBasicMaterial({ color: 0xead2c4 }));
     const flesh = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), energyMat('morph', { scale: [8, 8, 8], cut: 0.35 }));
@@ -1905,6 +1947,7 @@ function castBolt(key, m, c) {
     if (m.implode) implode(point, m.implode, t, m.damage || 1, key);
     if (m.boomerang) castBolt(key, { ...m, boomerang: false, life: 1.2 }, { ...c, t, hand: point.clone(), dir: c.eye.clone().setY(c.eye.y - 0.3).sub(point).normalize(), scale: 1 });
     if (m.turret) { plantTurret(point, stopNormal || UP, t); }
+    if (m.summon) raiseThrall(point.clone().setY(point.y + 0.4), t);
     stopNormal = null;
     if (m.entangle) for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(point) < m.entangle) hit(e, 'flora', t, UP, { damage: 1 });
     if (key === 'aqua') quench(point, m.freeze ? 1.2 : 0.8, t);
@@ -2628,7 +2671,53 @@ function castLance(key, m, c) {
     return a < 0.36;
   });
 }
-const KIND = { lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
+// --- Necro: thralls. The dead, raised. They hunt the nearest creature, bite it, and throw themselves in front of shards.
+const thralls = [];
+function raiseThrall(pos, t) {
+  if (thralls.length >= 4) thralls[0].until = 0;
+  const g = new THREE.Group();
+  const bone = new THREE.MeshBasicMaterial({ color: 0xeafff4 }), dark = new THREE.MeshBasicMaterial({ color: 0x06301f });
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8).scale(1, 1.1, 1.15), bone));                      // skull
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.08).translate(0, -0.085, 0.03), bone));               // jaw
+  for (const x of [-0.035, 0.035]) {
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6).translate(x, 0.01, 0.085), dark));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.011, 6, 5).translate(x, 0.01, 0.1), glowMat(new THREE.Color(0x6cf0c2), 1)));
+  }
+  g.position.copy(pos); g.scale.setScalar(0.01);
+  const self = { g, pos: g.position, vel: new THREE.Vector3(), until: t + (forms.necro === 'plague' ? 36 : 18), biteAt: 0 };
+  thralls.push(self);
+  play(SFX.necro.rise); puff('necro', pos, 30, 1.8, { up: 1.5 });
+  const epoch = shapeEpoch, to = new THREE.Vector3();
+  let then = t;
+  addEffect([g], (n) => {
+    const dt = Math.min(n - then, 0.08); then = n;
+    if (epoch !== shapeEpoch || n > self.until) { thralls.splice(thralls.indexOf(self), 1); puff('necro', self.pos, 24, 1.6, {}); return false; }
+    g.scale.setScalar(Math.min((n - t) / 0.4, 1) * 1.2);
+    let prey = null, near = 9;
+    for (const e of echoes) { if (e.down) continue; const d = e.group.position.distanceTo(self.pos); if (d < near) { near = d; prey = e; } }
+    for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.5) { o.dead = true; play(SFX.necro.bite); puff('necro', o.pos, 12, 1.6, {}); self.until -= 3; }   // it takes the hit for you
+    if (prey) {
+      to.copy(prey.group.position).sub(self.pos);
+      self.vel.lerp(to.clone().setLength(near > 0.4 ? 1.7 : 0), Math.min(dt * 4, 1));
+      g.lookAt(prey.group.position);
+      reveal(prey, n, 1, ELEMENTS.necro.color);
+      if (near < 0.5 && n > self.biteAt) { self.biteAt = n + 1; play(SFX.necro.bite); hit(prey, 'necro', n, to.normalize(), { damage: 1, venom: forms.necro === 'plague' }); }
+    } else {                                         // nothing to hunt: it comes back and waits by your shoulder
+      to.copy(viewerPos).add(_np.set(Math.sin(thralls.indexOf(self) * 2.1) * 0.6, 0.15, Math.cos(thralls.indexOf(self) * 2.1) * 0.6)).sub(self.pos);
+      self.vel.lerp(to.multiplyScalar(1.5).clampLength(0, 1.5), Math.min(dt * 3, 1));
+    }
+    self.pos.addScaledVector(self.vel, dt);
+    self.pos.y += Math.sin(n * 3 + self.until) * 0.002;
+    if (Math.random() < 0.2) puff('necro', self.pos, 1, 0.2, {});
+    return true;
+  });
+  hudNote = 'it rises'; drawHud();
+  return self;
+}
+function castLegion(key, m, c) {
+  for (let i = 0; i < m.count; i++) raiseThrall(c.hand.clone().add(new THREE.Vector3(Math.cos(i * 2.1) * 0.5, 0.1, Math.sin(i * 2.1) * 0.5 - 0.4)), c.t + i * 0.001);
+}
+const KIND = { legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
 
 // Both hands together: the same move, bigger and one point harder.
 function empowered(key, m, power) {
@@ -2670,10 +2759,11 @@ function shoveBarrier(key, c) {
 function cast(key, gesture, c) {
   let m = MOVES[key][gesture];
   if (!m) return;
-  if (gesture === 'shove' && c.hand && shoveBarrier(key, c)) return;
+  if (gesture === 'shove' && c.hand && !c.quiet && shoveBarrier(key, c)) return;
   barrierKey = key;
+  if (m.kind === 'ring' && m.summon) raiseThrall((c.ground || c.hand).clone().setY((c.ground || c.hand).y + 0.5), c.t);
   if (c.st && key === 'lumen' && gesture === 'sweep') summonBlade(c.st, c.t);
-  noteGesture(`${gesture} > ${m.name}`);
+  if (!c.quiet) noteGesture(`${gesture} > ${m.name}`);
   if (m.kind === 'grip') return;                    // holds are driven by beginHold / updateHold, not cast here
   if (key === 'terra' && terraForm !== 'rock') {      // the same move, made of something else
     m = { ...m, form: terraForm };
@@ -2706,6 +2796,8 @@ function cast(key, gesture, c) {
     if (form === 'venom') m.venom = true;
     if (form === 'fear') m.fear = true;
     if (form === 'hollow') m.hollow = true;
+    if (form === 'plague') m.venom = true;
+    if (form === 'spirit') m.sonic = true;
   }
   if (m.armour) armour(c.t, m.armour);
   if (m.sky) {                                     // it comes down on what you are aiming at, not out of your hand
@@ -2756,6 +2848,7 @@ function cast(key, gesture, c) {
     c.wet = true;
   }
   if (c.power > 1) m = empowered(key, m, c.power);
+  if (c.quiet) { tone(500, 300, 0.08, 0.06, 'triangle'); KIND[m.kind](key, m, c); return; }
   lastCast = key;
   moveSound(key, gesture, m.form);
   hudNote = (c.wet ? 'full ' : c.power > 1 ? 'twin ' : '') + (m.form ? m.form + ' ' : '') + m.name.toLowerCase();
@@ -2783,7 +2876,7 @@ const OBJ = {
 const HEAT_TIME = 10;                               // seconds stone and steel stay hot
 const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'barrel', 'barrel', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
 const MAX_OBJECTS = 24;
-const GRIP = { aero: 'Wind Grip', aqua: 'Water Grip', terra: 'Unearth', pyro: 'Fireball', lumen: 'Sunburst', gravis: 'Gravity Grip', flora: 'Vine Grip', astra: 'Meteor Shower', morph: 'Grapple', umbra: 'Black Sun' };
+const GRIP = { aero: 'Wind Grip', aqua: 'Water Grip', terra: 'Unearth', pyro: 'Fireball', lumen: 'Sunburst', gravis: 'Gravity Grip', flora: 'Vine Grip', astra: 'Meteor Shower', morph: 'Grapple', umbra: 'Black Sun', necro: 'Legion' };
 const objects = [];
 const objGroup = new THREE.Group();
 scene.add(objGroup);
@@ -3520,7 +3613,7 @@ const orbsOf = (key) => [0, 1].map(() => {
   return g;
 });
 const extraOrbs = {};
-for (const k of ['lumen', 'gravis', 'flora', 'astra', 'morph', 'umbra']) extraOrbs[k] = orbsOf(k);
+for (const k of ['lumen', 'gravis', 'flora', 'astra', 'morph', 'umbra', 'necro']) extraOrbs[k] = orbsOf(k);
 const hideOrbs = (i) => { chargeOrbs[i].visible = rockOrbs[i].visible = windOrbs[i].visible = false; for (const k in extraOrbs) extraOrbs[k][i].visible = false; };
 const CHARGE_MIN = 0.6, CHARGE_MAX = 1.6, CHARGE_REACH = 0.45;   // a fist closer to you than this charges; further out, it grabs
 let waterBoost = null;                            // where a charging Aqua fist is, while it is charging
@@ -3986,7 +4079,7 @@ function plantWall(a, b, t) {
 
 // --- drawn lines ---
 const DRAW_STEP = 0.12, DRAW_MAX = 28;
-const DRAWN = { terra: 'Ridge', pyro: 'Fire Line', aqua: 'Stream', aero: 'Current', lumen: 'Mirror Line', gravis: 'Rift', flora: 'Snare', astra: 'Constellation', morph: 'Glaive', umbra: 'Veil' };   // what a pinch makes
+const DRAWN = { terra: 'Ridge', pyro: 'Fire Line', aqua: 'Stream', aero: 'Current', lumen: 'Mirror Line', gravis: 'Rift', flora: 'Snare', astra: 'Constellation', morph: 'Glaive', umbra: 'Veil', necro: 'Bone Fence' };   // what a pinch makes
 let drawing = null;                                 // { key, pts, owner }
 function drawBegin(key, p, owner = null) { drawing = { key, pts: [p.clone()], owner }; noteGesture('pinch'); }
 function drawAdd(p) {
@@ -4000,10 +4093,82 @@ function drawEnd(t) {
   const d = drawing;
   drawing = null;
   if (!d || d.pts.length < 3) return null;
+  // A sigil. If the line closes on itself it is a circle, and a circle summons: the discipline's own familiar appears in it.
+  let len = 0; for (let i = 1; i < d.pts.length; i++) len += d.pts[i].distanceTo(d.pts[i - 1]);
+  if (len > 0.7 && d.pts[0].distanceTo(d.pts[d.pts.length - 1]) < 0.22) {
+    const centre = new THREE.Vector3(); for (const q of d.pts) centre.add(q); centre.divideScalar(d.pts.length);
+    lastCast = d.key; play(SFX.summon);
+    const made = summonFamiliar(d.key, centre, t);
+    drawHud();
+    return made;
+  }
   moveSound(d.key, 'draw', formOf(d.key) === FORMS[d.key][0] ? null : formOf(d.key)); lastCast = d.key;
-  const made = d.key === 'aero' ? makeCurrent(d.pts, t) : d.key === 'pyro' ? fireLine(d.pts, t) : d.key === 'terra' ? raiseRidge(d.pts, t) : d.key === 'lumen' ? mirrorLine(d.pts, t) : d.key === 'gravis' ? rift(d.pts, t) : d.key === 'flora' ? snare(d.pts, t) : d.key === 'astra' ? constellation(d.pts, t) : d.key === 'morph' ? raiseRidge(d.pts, t, 'bone') : d.key === 'umbra' ? mirrorLine(d.pts, t, 'shadow') : null;
+  const made = d.key === 'aero' ? makeCurrent(d.pts, t) : d.key === 'pyro' ? fireLine(d.pts, t) : d.key === 'terra' ? raiseRidge(d.pts, t) : d.key === 'lumen' ? mirrorLine(d.pts, t) : d.key === 'gravis' ? rift(d.pts, t) : d.key === 'flora' ? snare(d.pts, t) : d.key === 'astra' ? constellation(d.pts, t) : d.key === 'morph' ? raiseRidge(d.pts, t, 'bone') : d.key === 'umbra' ? mirrorLine(d.pts, t, 'shadow') : d.key === 'necro' ? raiseRidge(d.pts, t, 'bone') : null;
   drawHud();
   return made;
+}
+
+// --- familiars ---
+// One per discipline, each with its own body and its own habit. Two at a time. They use the discipline's own basic
+// attack, in whatever sub-element you are in when they fire, so everything that attack does, theirs does.
+const FAMILIAR = {
+  pyro:   { name: 'Ember Wisp',  geo: () => new THREE.OctahedronGeometry(0.09),            rate: 1.3, range: 6, habit: 'post' },
+  terra:  { name: 'Stone Sentry', geo: () => craggy(new THREE.DodecahedronGeometry(0.14), 0.03), rate: 2.2, range: 7, habit: 'post' },
+  aero:   { name: 'Cyclone',     geo: () => new THREE.TorusGeometry(0.11, 0.035, 8, 20),   rate: 1.6, range: 5, habit: 'roam' },
+  lumen:  { name: 'Sun Mote',    geo: () => new THREE.IcosahedronGeometry(0.06),           rate: 1.8, range: 8, habit: 'follow' },
+  gravis: { name: 'Moon',        geo: () => new THREE.SphereGeometry(0.1, 16, 12),         rate: 2.6, range: 6, habit: 'orbit' },
+  astra:  { name: 'Guide Star',  geo: () => new THREE.TetrahedronGeometry(0.1),            rate: 2.0, range: 9, habit: 'high' },
+  umbra:  { name: 'Shade',       geo: () => new THREE.ConeGeometry(0.09, 0.26, 5),         rate: 1.7, range: 6, habit: 'follow' },
+};
+const familiars = [];
+function summonFamiliar(key, centre, t) {
+  if (key === 'flora') {                             // Flora's familiar is the snapper: it grows on the nearest surface to the circle
+    const s = nearestRoomSurface(centre, 3);
+    hudNote = 'snapper';
+    return plantTurret(s ? s.point.clone() : centre.clone().setY(0), s ? s.normal.clone() : UP.clone(), t);
+  }
+  if (key === 'necro') { raiseThrall(centre.clone(), t); return raiseThrall(centre.clone().add(new THREE.Vector3(0.3, 0, 0)), t); }
+  const F = FAMILIAR[key];
+  if (!F) return null;
+  if (familiars.length >= 2) familiars[0].until = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(F.geo(), key === 'terra' ? earthMat(terraForm) : key === 'umbra' ? new THREE.MeshBasicMaterial({ color: 0x08020f }) : energyMat(key, { scale: [9, 9, 9], cut: 0.25 }));
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.006, 6, 40), glowMat(ELEMENTS[key].color.clone(), 0.8));
+  g.add(body, halo);
+  g.position.copy(centre); g.scale.setScalar(0.01);
+  const self = { key, g, pos: g.position, until: t + 22, fireAt: t + 0.8, home: centre.clone(), phase: Math.random() * 6 };
+  familiars.push(self);
+  puff(key, centre, 30, 2, {});
+  const epoch = shapeEpoch, to = new THREE.Vector3();
+  let then = t;
+  addEffect([g], (n) => {
+    const dt = Math.min(n - then, 0.08); then = n;
+    if (epoch !== shapeEpoch || n > self.until) { familiars.splice(familiars.indexOf(self), 1); puff(key, self.pos, 20, 1.6, {}); return false; }
+    g.scale.setScalar(Math.min((n - t) / 0.4, 1));
+    body.rotation.y += dt * (key === 'aero' ? 14 : 1.5); body.rotation.x += dt * 0.7;
+    halo.rotation.x = Math.PI / 2 + Math.sin(n * 2 + self.phase) * 0.5; halo.rotation.y += dt * 2;
+    // where it likes to be
+    if (F.habit === 'follow') to.copy(viewerPos).add(_np.set(0.45, 0.25, -0.2));
+    else if (F.habit === 'orbit') to.copy(viewerPos).add(_np.set(Math.cos(n * 1.4) * 0.8, 0.2, Math.sin(n * 1.4) * 0.8));
+    else if (F.habit === 'roam') to.copy(self.home).add(_np.set(Math.cos(n * 0.7 + self.phase) * 1.2, Math.sin(n * 1.1) * 0.2, Math.sin(n * 0.7 + self.phase) * 1.2));
+    else if (F.habit === 'high') to.copy(self.home).setY(Math.min(self.home.y + 0.9, roomBounds().max.y - 0.25));
+    else to.copy(self.home);
+    self.pos.lerp(to, Math.min(dt * 3, 1));
+    if (key === 'pyro' || key === 'lumen' || key === 'astra') lightNow(self.pos, key === 'pyro' ? FIRE_LIGHT : VOLT_LIGHT, 0.5);
+    if (Math.random() < 0.25) puff(key, self.pos, 1, 0.3, {});
+    if (n < self.fireAt) return true;
+    let prey = null, near = F.range;
+    for (const e of echoes) { if (e.down) continue; const d = e.group.position.distanceTo(self.pos); if (d < near && (key === 'gravis' || key === 'umbra' || lineOfSight(self.pos, e.group.position))) { near = d; prey = e; } }
+    if (prey) {
+      self.fireAt = n + F.rate;
+      const dir = prey.group.position.clone().sub(self.pos).normalize();
+      reveal(prey, n, 1.5, ELEMENTS[key].color);
+      cast(key, 'punch', { hand: self.pos.clone().addScaledVector(dir, 0.2), dir, eye: self.pos.clone(), fwd: dir.clone().setY(0).normalize(), t: n, quiet: true });
+    }
+    return true;
+  });
+  hudNote = F.name.toLowerCase();
+  return self;
 }
 
 // --- Aero: currents ---
@@ -4496,7 +4661,7 @@ const CHI_COOL = new THREE.Color(0x8a1a05), CHI_HOT = new THREE.Color(0xffc24a);
 const held = { aqua: null, pyro: null, lumen: null };   // set each frame by whoever is holding a sense
 const _amb = new THREE.Color();
 
-const SENSE_TINT = { pyro: [0.16, 0.045, 0.01], gravis: [0.06, 0.03, 0.15], morph: [0.16, 0.02, 0.04], umbra: [0.05, 0.0, 0.1], lumen: [0.15, 0.14, 0.1], astra: [0.05, 0.07, 0.16] };
+const SENSE_TINT = { necro: [0.02, 0.1, 0.07], pyro: [0.16, 0.045, 0.01], gravis: [0.06, 0.03, 0.15], morph: [0.16, 0.02, 0.04], umbra: [0.05, 0.0, 0.1], lumen: [0.15, 0.14, 0.1], astra: [0.05, 0.07, 0.16] };
 let senseWas = null;
 function updateHeldSenses(t, heldDt = 0.016) {
   const sensing = held.pyro || held.aqua || held.lumen ? selected : null;      // the note a held sense opens on
@@ -4584,9 +4749,11 @@ function cycleForm(key = 'terra') {
   hudNote = `${ELEMENTS[key].label.toLowerCase()} as ${formOf(key)}`; lastCast = key;
   drawHud();
 }
+let prevSelected = 'pyro';                         // the one before this one: a middle-finger pinch goes back to it
 function selectElement(key, quiet) {
   if (selected === key && !quiet) { cycleForm(key); return; }
   if (selected === key && quiet) return;
+  prevSelected = selected;
   selected = key;
   lastCast = key;
   for (const el of chipEls) el.classList.toggle('on', el.dataset.el === key);
@@ -4595,22 +4762,51 @@ function selectElement(key, quiet) {
     el.textContent = g === 'sense' ? ELEMENTS[key].sense : g === 'draw' ? DRAWN[key] : MOVES[key][g].name;
     el.style.setProperty('--c', `#${ELEMENTS[key].color.getHexString()}`);
   }
-  menuOrbs.forEach((orb, i) => orb.scale.setScalar(ELEMENT_ORDER[i] === key ? 1.6 : 1));
   if (!quiet) { tick(); hudNote = `${ELEMENTS[key].label.toLowerCase()} ready`; }
   drawHud();
 }
 
 // Palm menu: four orbs that float over an open palm turned toward your face.
 const menuGroup = new THREE.Group();
+// The power wheel. An open palm turned toward you puts every discipline in a ring round it, each a coloured bead.
+// Hover the other hand's fingertip near a bead and the plate in the middle names it; touch the bead to take it.
+// Under the plate, the three sub-elements of the discipline you are in: touch one to switch straight to it.
 const menuOrbs = ELEMENT_ORDER.map((key) => {
   const orb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.013, 16, 12),
+    new THREE.SphereGeometry(0.012, 16, 12),
     new THREE.MeshBasicMaterial({ color: ELEMENTS[key].color, depthTest: false, transparent: true }),
   );
   orb.renderOrder = 25;
   menuGroup.add(orb);
   return orb;
 });
+function makePlate(w, h, px = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = px; canvas.height = Math.round(px * h / w);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false }));
+  mesh.renderOrder = 26;
+  menuGroup.add(mesh);
+  let shown = null;
+  return { mesh, draw(text, colour, on = false, sub = '') {
+    const id = text + colour + on + sub;
+    if (id === shown) return;
+    shown = id;
+    const c = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+    c.clearRect(0, 0, W, H);
+    c.fillStyle = on ? colour : 'rgba(8,10,14,0.82)';
+    c.strokeStyle = colour; c.lineWidth = 6;
+    c.beginPath(); c.roundRect(4, 4, W - 8, H - 8, H * 0.3); c.fill(); c.stroke();
+    c.fillStyle = on ? '#06080c' : colour; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `600 ${Math.round(H * (sub ? 0.4 : 0.5))}px system-ui, sans-serif`;
+    c.fillText(text, W / 2, sub ? H * 0.36 : H / 2);
+    if (sub) { c.font = `${Math.round(H * 0.24)}px system-ui, sans-serif`; c.fillStyle = '#c8d0dc'; c.fillText(sub, W / 2, H * 0.74); }
+    tex.needsUpdate = true;
+  } };
+}
+const menuPlate = makePlate(0.1, 0.042, 384);
+const formPlates = [0, 1, 2, 3].map(() => makePlate(0.046, 0.02, 160));
+const WHEEL_R = 0.115;
 menuGroup.visible = false;
 scene.add(menuGroup);
 // Under the orbs: three switches.
@@ -4748,6 +4944,7 @@ function newHand() {
     pinkyBase: new THREE.Vector3(), indexTip: new THREE.Vector3(), hasTip: false,
     point: false, pointDir: new THREE.Vector3(),
     thumbTip: new THREE.Vector3(), pinchPos: new THREE.Vector3(), pinch: false, wasPinch: false,
+    midTip: new THREE.Vector3(), ringTip: new THREE.Vector3(), midPinch: false, ringPinch: false, quickT: -9,
     prev: new THREE.Vector3(), vel: new THREE.Vector3(),
   };
 }
@@ -4834,6 +5031,13 @@ function readHand(frame, source, refSpace, st, dt) {
     st.pinchPos.addVectors(st.thumbTip, st.indexTip).multiplyScalar(0.5);
     if (gap > PINCH_OFF) st.pinch = false;
     else if (gap < PINCH_ON && restN > 0 && restSum / restN / reach > 1.4) st.pinch = true;
+    // The other two pinches are shortcuts, not moves. They only count on an otherwise open hand, so a fist cannot set them off.
+    const openHand = gap > 0.045 && st.curl > 1.35;
+    const mid = jointPos(frame, hand, 'middle-finger-tip', refSpace, st.midTip) ? st.thumbTip.distanceTo(st.midTip) : 9;
+    const ring = jointPos(frame, hand, 'ring-finger-tip', refSpace, st.ringTip) ? st.thumbTip.distanceTo(st.ringTip) : 9;
+    st.midEdge = false; st.ringEdge = false;
+    if (mid > 0.045) st.midPinch = false; else if (mid < 0.018 && openHand && !st.midPinch && ring > 0.03) { st.midPinch = true; st.midEdge = true; }
+    if (ring > 0.045) st.ringPinch = false; else if (ring < 0.018 && openHand && !st.ringPinch && mid > 0.03) { st.ringPinch = true; st.ringEdge = true; }
   } else st.pinch = false;
   if (st.seen && dt > 0) {
     _raw.subVectors(st.palm, st.prev).divideScalar(dt);
@@ -4856,7 +5060,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 10. open palm toward you: pick'; drawHud(); }
+  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 11. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;
@@ -4871,16 +5075,34 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
   if (menuHand) {
     const pointer = menuHand === L ? R : L;
     let touching = -1;
+    const fing = _cp.subVectors(menuHand.knuckle, menuHand.wrist).normalize();
+    const hub = _cv.copy(menuHand.palm).addScaledVector(menuHand.normal, 0.07);
+    const tip = pointer.valid && pointer.hasTip ? pointer.indexTip : null;
+    let hover = -1, hoverDist = 0.05;
     menuOrbs.forEach((orb, i) => {
-      orb.position.copy(menuHand.palm)
-        .addScaledVector(menuHand.normal, 0.06)
-        .addScaledVector(menuHand.across, ((i & 3) - (Math.min(4, ELEMENT_ORDER.length - (i >> 2) * 4) - 1) / 2) * 0.042)
-        .addScaledVector(_cp.subVectors(menuHand.knuckle, menuHand.wrist).normalize(), (i >> 2) * 0.042);   // the new ones sit a row up, toward the fingers
-      if (pointer.valid && pointer.hasTip && pointer.indexTip.distanceTo(orb.position) < 0.03) touching = i;
+      const ang = (i / menuOrbs.length) * Math.PI * 2;
+      orb.position.copy(hub).addScaledVector(fing, Math.cos(ang) * WHEEL_R).addScaledVector(menuHand.across, Math.sin(ang) * WHEEL_R);
+      const d = tip ? tip.distanceTo(orb.position) : 9;
+      if (d < hoverDist) { hoverDist = d; hover = i; }
+    });
+    menuOrbs.forEach((orb, i) => orb.scale.setScalar(ELEMENT_ORDER[i] === selected ? 1.7 : i === hover ? 1.4 : 1));
+    if (hover >= 0 && hoverDist < 0.027) touching = hover;
+    const shownKey = hover >= 0 ? ELEMENT_ORDER[hover] : selected;
+    menuPlate.mesh.position.copy(hub).addScaledVector(fing, 0.02);
+    menuPlate.mesh.lookAt(viewerPos);
+    menuPlate.draw(ELEMENTS[shownKey].label, `#${ELEMENTS[shownKey].color.getHexString()}`, false, hover >= 0 && shownKey !== selected ? MOVES[shownKey].punch.name + ' · ' + MOVES[shownKey].slam.name + ' · ' + DRAWN[shownKey] : formOf(selected));
+    const list = FORMS[selected];
+    formPlates.forEach((pl, j) => {
+      pl.mesh.visible = j < list.length;
+      if (j >= list.length) return;
+      pl.mesh.position.copy(hub).addScaledVector(fing, -0.022 - (j >> 1) * 0.024).addScaledVector(menuHand.across, ((j & 1) - 0.5) * 0.05);
+      pl.mesh.lookAt(viewerPos);
+      pl.draw(list[j], `#${ELEMENTS[selected].color.getHexString()}`, formOf(selected) === list[j]);
+      if (tip && tip.distanceTo(pl.mesh.position) < 0.02) touching = 200 + j;
     });
     _off.subVectors(menuHand.wrist, menuHand.knuckle).normalize();          // toward the wrist: the second row sits below the orbs
     switchMeshes.forEach((sw, i) => {
-      sw.position.copy(menuHand.palm).addScaledVector(menuHand.normal, 0.06).addScaledVector(_off, 0.042).addScaledVector(menuHand.across, (i - 1.5) * 0.042);
+      sw.position.copy(menuHand.palm).addScaledVector(menuHand.normal, 0.07).addScaledVector(_off, WHEEL_R + 0.045).addScaledVector(menuHand.across, (i - 1.5) * 0.042);
       sw.lookAt(viewerPos);
       if (pointer.valid && pointer.hasTip && pointer.indexTip.distanceTo(sw.position) < 0.022) touching = 100 + i;
     });
@@ -4889,8 +5111,9 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (touching < 0) menuArmed = true;
     else if (menuArmed && t - lastMenuPick > 0.25) {
       menuArmed = false; lastMenuPick = t;
-      if (touching >= 100) flipSwitch(touching - 100);
-      else selectElement(ELEMENT_ORDER[touching]);        // picking the one you are in steps to its next sub-element
+      if (touching >= 200) { setForm(selected, FORMS[selected][touching - 200]); tick(); hudNote = `${ELEMENTS[selected].label.toLowerCase()} as ${formOf(selected)}`; lastCast = selected; drawHud(); }
+      else if (touching >= 100) flipSwitch(touching - 100);
+      else if (ELEMENT_ORDER[touching] !== selected) selectElement(ELEMENT_ORDER[touching]);
     }
   }
 
@@ -4920,6 +5143,13 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
   }
   for (const st of [L, R]) {
     if (!st.valid || st === menuHand || guard.on) continue;
+    if ((st.midEdge || st.ringEdge) && t - st.quickT > 0.5 && !st.hold && !(stream.on && stream.owner === st)) {
+      st.quickT = t; st.ready = false;
+      if (st.midEdge) { noteGesture('middle pinch'); const back = prevSelected; selectElement(back, true); play(SFX.swap); hudNote = `${ELEMENTS[selected].label.toLowerCase()} ready`; lastCast = selected; drawHud(); }
+      else { noteGesture('ring pinch'); cycleForm(selected); }
+      st.midEdge = st.ringEdge = false;
+      continue;
+    }
     const isFist = st.curl < CURL_FIST && !st.point, isOpen = st.curl > CURL_OPEN;
     const other = st === L ? R : L;
 
@@ -5213,7 +5443,8 @@ for (const el of optionEls) el.addEventListener('click', () => { ensureAudio(); 
 for (const el of chipEls) el.addEventListener('click', () => { ensureAudio(); selectElement(el.dataset.el); });
 for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); selectGesture(el.dataset.g); });
 window.addEventListener('keydown', (ev) => {
-  const i = '1234567890'.indexOf(ev.key);
+  if (ev.key === 'Tab') { ev.preventDefault(); selectElement(prevSelected, true); return; }
+  const i = '1234567890-'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
   const g = 'qwertyuiop'.indexOf(ev.key.toLowerCase());
   if (g >= 0) selectGesture(GESTURES[g]);
@@ -5402,7 +5633,7 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
-  mirrorLine, rift, implode, ELEMENT_ORDER, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
+  mirrorLine, rift, implode, ELEMENT_ORDER, thralls, raiseThrall, familiars, summonFamiliar, get prevSelected() { return prevSelected; }, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
   stream, startStream, endStream, plantWall, currents, makeCurrent, bendCurrents, fireLine, raiseRidge, drawBegin, drawAdd, drawEnd,
   get streamCtl() { return streamCtl; }, set streamCtl(v) { streamCtl = v; if (!v) stream.seenT = -9; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, throwCharged, kick,

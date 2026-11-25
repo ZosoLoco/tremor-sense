@@ -50,9 +50,8 @@ const HOLD_TIME = 0.4;      // ...for this long (s)
 const POINT_SPEED = 1.0;    // index finger jab, moving the way it points
 const CLAP_ON = 0.09;       // palms closer than this = clap
 const CLAP_OFF = 0.18;
-const AQUA_SENSE = { range: 8, angle: 0.3 };   // a narrow beam you sweep around, passes through walls
-const PYRO_SENSE = { radius: 2.8 };            // everything close to you, in every direction
-const AERO_SENSE = { range: 7, speed: 6 };     // a burst from the clap, line of sight only
+const TIDE_SENSE = { speed: 3.2, reach: 14 };  // water spreads across the whole floor; anything above it shows where it stands
+const DRAFT_SENSE = { speed: 9, lasts: 9 };    // the air of the whole room, for a while: anything that moves gives itself away
 
 const ACID = new THREE.Color(0xb6ff3c);
 const ELEMENTS = {
@@ -140,6 +139,7 @@ const now = () => pulseUniforms.uTime.value;
 const pulseUniforms = {
   uTime: { value: 0 },
   uBase: { value: 0.1 },
+  uAmbient: { value: new THREE.Color(0, 0, 0) },   // a wash over every surface while a sense is running
   uColor: { value: ACID },
   uPulses: { value: Array.from({ length: MAX_PULSES }, () => new THREE.Vector4(0, 0, 0, -999)) },
 };
@@ -161,6 +161,7 @@ const roomMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     uniform float uTime;
     uniform float uBase;
+    uniform vec3 uAmbient;
     uniform vec3 uColor;
     uniform vec4 uPulses[${MAX_PULSES}];
     varying vec3 vWorld;
@@ -186,7 +187,8 @@ const roomMat = new THREE.ShaderMaterial({
           a += (ring + echo + wake) * fade;
         }
       }
-      gl_FragColor = vec4(uColor * a, a);
+      float wash = max(uAmbient.r, max(uAmbient.g, uAmbient.b)) * (0.35 + grid);
+      gl_FragColor = vec4(uColor * a + uAmbient * (0.35 + grid), a + wash);
     }`,
 });
 
@@ -600,6 +602,7 @@ function scatterEchoes() {
   }
   downCount = 0;
   playerHP = MAX_HP;
+  draftUntil = -1;
   nextAttackAt = now() + CREATURE.firstAttack;
   scatterObjects();
   drawHud();
@@ -826,7 +829,7 @@ function updateEchoes(t, dt, viewerPos) {
     e.group.visible = o > 0.01;
     e.core.material.opacity = o;
     e.shell.material.opacity = o * 0.8;
-    e.halo.material.opacity = e.hp < 2 ? 0 : o * 0.5;
+    e.halo.material.opacity = e.hp < 2 ? 0 : o * 0.5;                // the outer ring is its second life: chi reads it at a glance
     e.ice.material.opacity = 0.32 * o;
     e.group.position.copy(e.home);
     if (!frozen) {
@@ -2258,70 +2261,146 @@ function throwFireball(hand, dir, eye, fwd, charge, t) {
 }
 
 // ---------- senses ----------
-// Terra: firePulse. A ripple through surfaces, passes through everything, needs a touch.
-// Aero: a burst of air from a clap. Long range, but only finds what it has a clear line to.
+// Each one fills the whole room and tells you something different.
+//   Tremor (Terra): a ripple through every surface from where you touched. Shows where things are, once.
+//   Draft  (Aero):  the room's air, for several seconds. Shows whatever is moving, and the trail it leaves.
+//   Chi    (Pyro):  heat and life, through walls, for as long as you hold it. Shows health, and which objects are hot.
+//   Tide   (Aqua):  water across the whole floor, for as long as you hold it. Shows where everything stands, by its ripples.
+let draftUntil = -1;
 function senseAero(centre, t) {
   hudNote = ELEMENTS.aero.sense.toLowerCase(); lastCast = 'aero'; drawHud();
   castSound.aero();
-  const color = ELEMENTS.aero.color;
-  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), glowMat(color, 0.5));
+  draftUntil = t + DRAFT_SENSE.lasts;
+  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 3), glowMat(ELEMENTS.aero.color, 0.35));
   shell.material.wireframe = true;
   shell.position.copy(centre);
-  const origin = centre.clone();
-  const seen = new Set();
-  addEffect([shell], (n) => {
-    const r = Math.max((n - t) * AERO_SENSE.speed, 0.01);
+  addEffect([shell], (n) => {                      // the clap itself, racing out to the walls
+    const r = Math.max((n - t) * DRAFT_SENSE.speed, 0.01);
     shell.scale.setScalar(r);
-    shell.material.opacity = 0.5 * (1 - r / AERO_SENSE.range);
-    for (const e of echoes) {
-      if (e.down || seen.has(e)) continue;
-      if (e.home.distanceTo(origin) < r) {
-        seen.add(e);
-        if (lineOfSight(origin, e.home)) reveal(e, n, REVEAL_TIME, color);
-      }
-    }
-    return r < AERO_SENSE.range;
+    shell.material.opacity = 0.35 * Math.max(1 - r / 12, 0);
+    return r < 12;
   });
 }
+const _wind = new THREE.Vector3(), _wp = new THREE.Vector3();
+function updateDraft(t) {
+  if (t > draftUntil) return;
+  const fade = Math.min((draftUntil - t) / 1.5, 1);
+  const box = roomBounds();
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+  for (let i = 0; i < Math.round(9 * fade); i++) {  // the room's air made visible: a slow turning current
+    _wp.set(THREE.MathUtils.lerp(box.min.x - 0.2, box.max.x + 0.2, Math.random()), 0.1 + Math.random() * 2.1, THREE.MathUtils.lerp(box.min.z - 0.2, box.max.z + 0.2, Math.random()));
+    _wind.set(-(_wp.z - cz), Math.sin(t + _wp.x * 2) * 0.25, _wp.x - cx).normalize().multiplyScalar(1.1);
+    particles.emit(_wp, _wind, PCOL.aero[i % 3], 0.014, 0.7, 0, 0);
+  }
+  for (const e of echoes) {                        // anything pushing through that air leaves a wake
+    if (e.down || !(e.moving > 0.12 || e.airborne)) continue;
+    reveal(e, t, 0.9, ELEMENTS.aero.color);
+    for (let i = 0; i < 2; i++) {
+      _wind.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.25);
+      particles.emit(_wp.copy(e.home).add(_wind), _wind, PCOL.aero[0], 0.03, 0.9, 0, 0.5);
+    }
+  }
+  for (const o of objects) {
+    if (o.dead || o.rest || o.vel.lengthSq() < 0.04) continue;
+    particles.emit(o.pos, _wind.set(0, 0, 0), o.hostile ? HOSTILE : PCOL.aero[1], 0.035, 0.8, 0, 0);
+  }
+}
 
-// Aqua: a narrow beam from a held palm. Reads the water in living things straight through walls.
-const aquaBeam = new THREE.Mesh(
-  new THREE.ConeGeometry(Math.tan(AQUA_SENSE.angle) * 6, 6, 28, 1, true).translate(0, -3, 0).rotateX(-Math.PI / 2),
-  glowMat(ELEMENTS.aqua.color, 0.07),
-);
-// Pyro: chi as body heat. Everything close to you glows, whichever way it is, walls or not.
-const pyroAura = new THREE.Mesh(
-  new THREE.RingGeometry(PYRO_SENSE.radius - 0.05, PYRO_SENSE.radius, 72).rotateX(-Math.PI / 2),
-  glowMat(ELEMENTS.pyro.color, 0.5),
-);
-aquaBeam.visible = pyroAura.visible = false;
-aquaBeam.renderOrder = pyroAura.renderOrder = 12;
-scene.add(aquaBeam, pyroAura);
+// Tide: a sheet of water over the floor. The moving front finds things; their ripples keep them found.
+const TIDE_PTS = 10;
+const tideUniforms = {
+  uTime: pulseUniforms.uTime, uOrigin: { value: new THREE.Vector2() }, uFront: { value: 0 }, uOpacity: { value: 0 },
+  uPts: { value: Array.from({ length: TIDE_PTS }, () => new THREE.Vector3(0, 0, 0)) },
+};
+const tideSheet = new THREE.Mesh(new THREE.CircleGeometry(TIDE_SENSE.reach, 64).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+  uniforms: tideUniforms, transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+  vertexShader: /* glsl */`varying vec2 vP; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vP = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: /* glsl */`
+    uniform float uTime, uFront, uOpacity; uniform vec2 uOrigin; uniform vec3 uPts[${TIDE_PTS}];
+    varying vec2 vP;
+    void main() {
+      float d = distance(vP, uOrigin);
+      if (d > uFront) discard;
+      float swell = 0.5 + 0.5 * sin(d * 7.0 - uTime * 3.0);
+      float edge = smoothstep(0.5, 0.0, uFront - d);                  // the leading lip of the water
+      float rings = 0.0;
+      for (int i = 0; i < ${TIDE_PTS}; i++) {
+        float dd = distance(vP, uPts[i].xy);
+        rings += uPts[i].z * (0.5 + 0.5 * sin(dd * 30.0 - uTime * 9.0)) * exp(-dd * 2.6);
+      }
+      float a = (0.05 + 0.05 * pow(swell, 6.0) + 0.5 * edge + 0.75 * rings) * uOpacity;
+      vec3 col = mix(vec3(0.62, 0.78, 0.82), vec3(1.0), clamp(edge + rings, 0.0, 1.0));
+      gl_FragColor = vec4(col, a);
+    }`,
+}));
+tideSheet.position.y = 0.012;
+tideSheet.visible = false;
+tideSheet.renderOrder = 11;
+scene.add(tideSheet);
+let tideFrom = -1;
+
+// Chi: heat ghosts for objects, seen through anything.
+const chiGhosts = Array.from({ length: MAX_OBJECTS }, () => {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), glowMat(new THREE.Color(0xff3a0a), 0));
+  m.visible = false; m.renderOrder = 9;
+  scene.add(m);
+  return m;
+});
+const CHI_COOL = new THREE.Color(0x8a1a05), CHI_HOT = new THREE.Color(0xffc24a);
+
 const held = { aqua: null, pyro: null };   // set each frame by whoever is holding a sense
-const _look = new THREE.Vector3();
+const _amb = new THREE.Color();
 
 function updateHeldSenses(t) {
+  // Tide
   const a = held.aqua;
-  aquaBeam.visible = !!a;
   if (a) {
-    aquaBeam.position.copy(a.origin);
-    aquaBeam.lookAt(_look.copy(a.origin).add(a.dir));
-    aquaBeam.material.opacity = 0.06 + 0.03 * Math.sin(t * 5);
-    for (const e of echoes) {
-      if (e.down) continue;
-      _to.copy(e.home).sub(a.origin);
-      if (_to.length() < AQUA_SENSE.range && _to.angleTo(a.dir) < AQUA_SENSE.angle) reveal(e, t, HOLD_REVEAL, ELEMENTS.aqua.color);
-    }
+    if (tideFrom < 0) { tideFrom = t; tideUniforms.uOrigin.value.set(a.origin.x, a.origin.z); castSound.aqua(); }
+    tideUniforms.uOpacity.value = Math.min(tideUniforms.uOpacity.value + 0.08, 1);
+  } else {
+    tideUniforms.uOpacity.value = Math.max(tideUniforms.uOpacity.value - 0.03, 0);
+    if (tideUniforms.uOpacity.value === 0) tideFrom = -1;
   }
+  tideSheet.visible = tideUniforms.uOpacity.value > 0;
+  if (tideSheet.visible && tideFrom >= 0) {
+    const front = Math.min((t - tideFrom) * TIDE_SENSE.speed, TIDE_SENSE.reach);
+    tideUniforms.uFront.value = front;
+    const o2 = tideUniforms.uOrigin.value;
+    let n = 0;
+    for (const e of echoes) {
+      if (e.down || Math.hypot(e.home.x - o2.x, e.home.z - o2.y) > front) continue;
+      if (a) reveal(e, t, HOLD_REVEAL, ELEMENTS.aqua.color);
+      if (n < TIDE_PTS) tideUniforms.uPts.value[n++].set(e.home.x, e.home.z, 1);
+    }
+    for (const o of objects) {                     // loose things disturb the water too, more faintly
+      if (n >= TIDE_PTS) break;
+      if (!o.dead && Math.hypot(o.pos.x - o2.x, o.pos.z - o2.y) < front) tideUniforms.uPts.value[n++].set(o.pos.x, o.pos.z, o.hostile ? 1 : 0.35);
+    }
+    for (; n < TIDE_PTS; n++) tideUniforms.uPts.value[n].z = 0;
+  }
+  // Chi
   const p = held.pyro;
-  pyroAura.visible = !!p;
+  _amb.setRGB(0, 0, 0);
   if (p) {
-    pyroAura.position.set(p.centre.x, 0.02, p.centre.z);
-    pyroAura.material.opacity = 0.35 + 0.2 * Math.sin(t * 7);
-    for (const e of echoes) {
-      if (!e.down && e.home.distanceTo(p.centre) < PYRO_SENSE.radius) reveal(e, t, HOLD_REVEAL, ELEMENTS.pyro.color);
+    _amb.setRGB(0.16, 0.045, 0.01);
+    for (const e of echoes) if (!e.down) reveal(e, t, HOLD_REVEAL, ELEMENTS.pyro.color);
+  }
+  pulseUniforms.uAmbient.value.lerp(_amb, 0.12);
+  let g = 0;
+  if (p) {
+    for (const o of objects) {
+      if (o.dead || g >= chiGhosts.length) continue;
+      const hot = o.burnUntil > 0 || o.fuse > 0 || o.heat > 0 || o.def.explodes;
+      const ghost = chiGhosts[g++];
+      ghost.visible = true;
+      ghost.position.copy(o.pos);
+      ghost.scale.setScalar(o.def.r * (hot ? 1.9 + 0.25 * Math.sin(t * 9) : 1.35));
+      ghost.material.color.copy(hot ? CHI_HOT : CHI_COOL);
+      ghost.material.opacity = o.hostile ? 0.7 : hot ? 0.5 : 0.2;
     }
   }
+  for (; g < chiGhosts.length; g++) chiGhosts[g].visible = false;
+  updateDraft(t);
   if ((a || p) && hudNote !== ELEMENTS[selected].sense.toLowerCase()) {
     hudNote = ELEMENTS[selected].sense.toLowerCase(); lastCast = selected; drawHud();
   }
@@ -2609,7 +2688,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     // Held senses: Aqua reads through a raised open palm, Pyro through a raised fist.
     const raised = st.palm.y > viewerPos.y - 0.5;
     if (raised && st.stillT > HOLD_TIME) {
-      if (selected === 'aqua' && isOpen && st.normal.dot(_fwd) > 0.5) held.aqua = { origin: st.palm, dir: st.normal };
+      if (selected === 'aqua' && isOpen && st.normal.dot(_fwd) > 0.5) held.aqua = { origin: viewerPos, dir: st.normal };
       if (selected === 'pyro' && isFist) held.pyro = { centre: viewerPos };
     }
 
@@ -2892,7 +2971,7 @@ renderer.setAnimationLoop((ms, frame) => {
     } else { reticles[0].visible = false; chargeOrbs[0].visible = false; }
     if (previewHold) {
       if (t > previewHold.until) previewHold = null;
-      else if (previewHold.kind === 'aqua') held.aqua = { origin: previewHold.origin, dir: previewHold.dir };
+      else if (previewHold.kind === 'aqua') held.aqua = { origin: camera.position, dir: previewHold.dir };
       else held.pyro = { centre: previewHold.origin };
     }
   }
@@ -2910,7 +2989,8 @@ renderer.setAnimationLoop((ms, frame) => {
 // Small hook for automated checks.
 window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
-  collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin,
+  collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
+  get draftOn() { return now() < draftUntil; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
   barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit,
   get hp() { return playerHP; }, attackSoon() { nextAttackAt = 0; },

@@ -135,3 +135,20 @@ Thumb and index together, other fingers out.
 Creature kinds (ember, wisp, pebble, drip) and waves; palm menu second row: CALM (no attacks), READ (shows what the
 hand tracker thinks you did), NEW (new game); particle detail adapts to frame rate.
 In the browser preview: `charge` and `draw` chips (press, hold or drag, release).
+
+## Build 7: room view, occlusion, two new disciplines, sound
+
+- **Room view.** The grid is gone. The room is drawn as its outline (the hard edges of walls and furniture as lines) with
+  a faint fill, and a tremor pulse crosses it as a bright front with ripples behind. If the headset reports a scanned
+  mesh of the room, only that is drawn; otherwise furniture boxes; otherwise flat planes. They no longer stack.
+- **Occlusion.** Room surfaces are written to the depth buffer first, so real walls and furniture hide what is behind
+  them. Creatures revealed by a sense still glow through. `OCCL` on the palm menu turns it off.
+- **Lumen** (light): Lance, Flare, Pillar, Halo, Nova, Prism, Sunburst (charged), Mirror Line (drawn: turns shards back).
+  Hits dazzle and leave the target exposed, so the next hit from another discipline lands harder. Forms: light, prism,
+  shadow. Glint Sense (raised open palm): shows everything in line of sight.
+- **Gravis** (gravity): Graviton, Repulse, Levitate, Tilt, Crush, Singularity, Gravity Grip, Collapse (charged), Rift
+  (drawn: everything near falls toward the line). Crush brings down anything in the air. Forms: pull, float, crush.
+  Mass Sense (raised fist): creatures and objects through walls.
+- The palm menu has a second row of orbs, toward the fingers, for the new two. Keys 5 and 6 in the preview.
+- **Sound.** Every move has its own synthesised sound in its discipline's voice, sub-elements add a layer, and
+  everything runs through one compressor.

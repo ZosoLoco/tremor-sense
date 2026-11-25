@@ -31,7 +31,7 @@ Mixed reality prototype for the Terra discipline. Open the page in the Quest 3 b
 | Terra | Unearth | Holds stone and steel. Reach at bare floor and it tears out a fresh boulder to throw. |
 | Pyro | Fireball | Keep a raised fist closed to grow a fireball in it, then punch to throw. It explodes on impact. |
 
-**Objects.** Each round scatters crates, a powder keg, stone blocks and a steel ball on the floor. They fall, bounce off the real room and hurt any echo they hit at speed. Every move pushes them: Gust flings them, lifts and rings toss them, Rampart bulldozes them, Void drags them together. Fire lights crates (they burn away) and sets off the keg, which blasts everything nearby and can chain.
+**Objects.** Each round scatters crates, a powder keg, stone blocks and a steel ball on the floor. Each round scatters them on whatever is underneath: floor, table or couch. They fall, land on table tops, slide off edges, bounce off walls and furniture, knock into each other, and hurt any echo they hit at speed. Every move pushes them: Gust flings them, lifts and rings toss them, Rampart bulldozes them, Void drags them together. Fire lights crates (they burn away) and sets off the keg, which blasts everything nearby and can chain.
 
 **Twin casts.** Make the same move with both hands together and it comes out bigger and one point harder.
 

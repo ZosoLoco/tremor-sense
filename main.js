@@ -1632,10 +1632,13 @@ function scatterObjects() {
   for (const o of objects) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); }
   objects.length = 0;
   const box = roomBounds();
+  const top = new THREE.Vector3(), bottom = new THREE.Vector3();
   for (const kind of ['crate', 'crate', 'keg', 'stone', 'stone', 'ball']) {
-    spawnObject(kind, new THREE.Vector3(
-      THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), OBJ[kind].r,
-      THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()))).rest = true;
+    // Drop a line from head height: the object starts on whatever it lands on, table, couch or floor.
+    top.set(THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), 1.9, THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()));
+    const under = collide(top, bottom.copy(top).setY(-0.05));
+    const y = under && under.normal.y > 0.7 ? under.point.y : 0;
+    spawnObject(kind, new THREE.Vector3(top.x, y + OBJ[kind].r, top.z)).rest = true;
   }
 }
 function ignite(o, t) {
@@ -1721,10 +1724,21 @@ function updateObjects(t, dt) {
           if (!o.held && wall.normal.y > 0.7 && o.vel.length() < 0.6) { o.vel.set(0, 0, 0); o.rest = true; }
         } else o.pos.copy(_on);
       }
-      if (o.pos.y < r) {                                   // the floor is always there, scanned or not
-        o.pos.y = r;
-        if (o.vel.y < 0) { o.vel.y *= -o.def.bounce; o.vel.x *= 0.85; o.vel.z *= 0.85; }
-        if (!o.held && o.vel.length() < 0.6) { o.vel.set(0, 0, 0); o.rest = true; }
+      // What is it standing on? Look straight down for a table top, a couch, the scanned floor.
+      // The floor at height zero is always there, scanned or not.
+      let groundY = 0;
+      if (o.pos.y > r + 0.02) {
+        const under = collide(_op.copy(o.pos).setY(o.pos.y + r * 0.5), _on.copy(o.pos).setY(o.pos.y - r - 0.03));
+        groundY = under && under.normal.y > 0.5 ? under.point.y : -Infinity;
+      }
+      if (o.pos.y - r <= groundY + 0.001) {
+        o.pos.y = groundY + r;
+        if (o.vel.y < 0) { o.vel.y = o.vel.y < -1.2 ? -o.vel.y * o.def.bounce : 0; }
+        if (!o.held) {
+          const grip = Math.max(1 - (o.kind === 'ball' ? 0.8 : 3) * dt, 0);      // boxes scrape to a stop, the ball keeps rolling
+          o.vel.x *= grip; o.vel.z *= grip;
+          if (o.vel.length() < 0.25) { o.vel.set(0, 0, 0); o.rest = true; }
+        }
       }
       o.mesh.rotation.x += o.vel.z * dt / r;
       o.mesh.rotation.z -= o.vel.x * dt / r;
@@ -1741,6 +1755,34 @@ function updateObjects(t, dt) {
       }
     }
     o.mesh.position.copy(o.pos);
+  }
+  // Objects against each other: push apart, trade speed along the line between them.
+  for (let i = 0; i < objects.length; i++) {
+    const a = objects[i];
+    if (a.dead) continue;
+    for (let j = i + 1; j < objects.length; j++) {
+      const b = objects[j];
+      if (b.dead || (a.rest && b.rest)) continue;
+      _od.copy(b.pos).sub(a.pos);
+      const gap = _od.length(), min = a.def.r + b.def.r;
+      if (gap >= min || gap < 1e-4) continue;
+      _od.divideScalar(gap);
+      const wa = a.held ? 0 : 1 / a.def.mass, wb = b.held ? 0 : 1 / b.def.mass;
+      if (wa + wb === 0) continue;
+      const overlap = min - gap;
+      a.pos.addScaledVector(_od, -overlap * wa / (wa + wb));
+      b.pos.addScaledVector(_od, overlap * wb / (wa + wb));
+      const closing = _on.copy(b.vel).sub(a.vel).dot(_od);
+      if (closing < 0) {
+        const jImp = -(1.3) * closing / (wa + wb);
+        a.vel.addScaledVector(_od, -jImp * wa);
+        b.vel.addScaledVector(_od, jImp * wb);
+        if (closing < -1.5) thud();
+        if (closing < -6) { if (a.def.explodes) ignite(a, t); if (b.def.explodes) ignite(b, t); }
+      }
+      a.rest = b.rest = false;
+      a.mesh.position.copy(a.pos); b.mesh.position.copy(b.pos);
+    }
   }
 }
 

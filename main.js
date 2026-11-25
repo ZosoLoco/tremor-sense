@@ -652,7 +652,7 @@ function hit(e, key, t, dir, m = {}) {
 
   if (key === 'pyro') {
     if (frozen) { e.frozenUntil = -1; e.soakedUntil = t + 4; note = note || 'thaw'; }
-    else if (soaked && !m.volt) { e.soakedUntil = -1; note = 'steam'; puff('aero', pos, 22, 1.4, { up: 1.6, life: 0.7, size: 0.06 }); }
+    else if (soaked && !m.volt) { e.soakedUntil = -1; note = 'steam'; spawnCloud('steam', pos.clone(), t, 5); }
     else if (!m.volt && !m.noBurn) e.burnAt = t + 1.5;
   } else if (key === 'aqua') {
     e.burnAt = -1;                                  // water puts fire out
@@ -703,7 +703,7 @@ function pickGoal(e, t) {
 }
 const _cdir = new THREE.Vector3(), _cprobe = new THREE.Vector3();
 function creatureAI(e, t, dt, eye) {
-  if (e.frozenUntil > t || e.airborne || e.puppet) { e.windup = -1; return; }
+  if (e.frozenUntil > t || e.airborne || e.puppet || e.blindUntil > t) { e.windup = -1; return; }
   if (e.windup > 0) {                              // winding up: holds still, pulls light into itself
     if (t >= e.windup) { e.windup = -1; spit(e, eye, t); }
     else {
@@ -734,7 +734,7 @@ function spit(e, eye, t) {
 function directAttacks(t, eye) {
   if (!AI.on || t < nextAttackAt) return;
   if (objects.filter(o => o.hostile && !o.dead).length >= CREATURE.maxShots) return;
-  const able = echoes.filter(e => !e.down && e.windup < 0 && !(e.frozenUntil > t) && !e.airborne && !e.puppet
+  const able = echoes.filter(e => !e.down && e.windup < 0 && !(e.frozenUntil > t) && !(e.blindUntil > t) && !e.airborne && !e.puppet
     && e.home.distanceTo(eye) < CREATURE.sight && lineOfSight(e.home, eye));
   nextAttackAt = t + CREATURE.attackEvery * (0.7 + Math.random() * 0.6);
   if (!able.length) return;
@@ -898,7 +898,7 @@ const NOISE_GLSL = /* glsl */`
 const ENERGY = {
   // a: hot core colour, b: body colour, scale: noise frequency per axis, speed: how fast it flows,
   // cut/soft: how much of the surface is filled in (low cut = dense, high cut = wispy)
-  pyro: { a: 0xfff3b0, b: 0xff4a0a, scale: [9, 7, 9],     speed: 2.6, cut: 0.36, soft: 0.22 },
+  pyro: { a: 0xfff0b8, b: 0xff5a0c, c: 0x7a0c02, scale: [9, 7, 9], speed: 2.6, cut: 0.38, soft: 0.26 },
   aqua: { a: 0xe6fbff, b: 0x1487ff, scale: [5, 4, 5],     speed: 1.6, cut: 0.2,  soft: 0.5 },
   aero: { a: 0xffffff, b: 0xbfeeff, scale: [16, 1.6, 16], speed: 4.5, cut: 0.56, soft: 0.16 },
 };
@@ -953,7 +953,7 @@ function energyMat(key, o = {}) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uTime: pulseUniforms.uTime,
-      uA: { value: new THREE.Color(P.a) }, uB: { value: new THREE.Color(P.b) },
+      uA: { value: new THREE.Color(P.a) }, uB: { value: new THREE.Color(P.b) }, uC: { value: new THREE.Color(P.c ?? P.b) },
       uScale: { value: new THREE.Vector3(...(o.scale || P.scale)) },
       uFlow: { value: new THREE.Vector3(...(o.flow || [0, 1, 0])).multiplyScalar(P.speed) },
       uCut: { value: o.cut ?? P.cut }, uSoft: { value: P.soft },
@@ -965,7 +965,7 @@ function energyMat(key, o = {}) {
       void main() { vObj = position; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */`
       uniform float uTime, uCut, uSoft, uFade, uOpacity;
-      uniform vec3 uA, uB, uScale, uFlow;
+      uniform vec3 uA, uB, uC, uScale, uFlow;
       varying vec3 vObj; varying vec2 vUv;
       ${NOISE_GLSL}
       void main() {
@@ -974,7 +974,8 @@ function energyMat(key, o = {}) {
         float body = smoothstep(uCut, uCut + uSoft, n + lift);
         float core = smoothstep(uCut + uSoft * 0.6, uCut + uSoft * 1.8, n + lift);
         float a = body * uOpacity;
-        gl_FragColor = vec4(mix(uB, uA, core) * a, a);
+        vec3 col = mix(mix(uC, uB, smoothstep(0.0, 0.6, body)), uA, core);       // thin edges run to the cooler colour
+        gl_FragColor = vec4(col * a, a);
       }`,
   });
   mat.opacity = o.opacity ?? 1;
@@ -989,7 +990,7 @@ function stoneMat(metal = false, pal = null) {
     uniforms: {
       uMetal: { value: metal ? 1 : 0 },
       uDark: { value: new THREE.Color(pal ? pal.dark : 0x332b21) }, uLight: { value: new THREE.Color(pal ? pal.light : 0x8f7a5c) },
-      uSeam: { value: new THREE.Color(pal ? pal.seam : 0xe09e29) }, uSeamAmt: { value: pal ? pal.amt : 0.55 },
+      uSeam: { value: new THREE.Color(pal ? pal.seam : 0xe09e29) }, uSeamAmt: { value: pal ? pal.amt : 0.55 }, uHeat: { value: 0 },
       uGrain: { value: new THREE.Vector3(...(pal ? pal.grain : [7, 7, 7])) },
     },
     side: THREE.DoubleSide,
@@ -998,7 +999,7 @@ function stoneMat(metal = false, pal = null) {
       void main() { vObj = position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: /* glsl */`
       varying vec3 vW; varying vec3 vObj;
-      uniform float uMetal, uSeamAmt; uniform vec3 uDark, uLight, uSeam, uGrain;
+      uniform float uMetal, uSeamAmt, uHeat; uniform vec3 uDark, uLight, uSeam, uGrain;
       ${NOISE_GLSL}
       void main() {
         vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
@@ -1011,7 +1012,11 @@ function stoneMat(metal = false, pal = null) {
         vec3 L = normalize(vec3(0.35, 1.0, 0.45)), V = normalize(cameraPosition - vW);
         float spec = pow(max(dot(reflect(-L, n), V), 0.0), 18.0) + 0.35 * pow(1.0 - max(dot(n, V), 0.0), 3.0);
         vec3 steel = vec3(0.42, 0.45, 0.5) * (0.35 + 0.65 * light) * (0.85 + 0.3 * grain) + vec3(0.95, 0.97, 1.0) * spec;
-        gl_FragColor = vec4(mix(mix(rock, pow(uSeam, g22), seam * uSeamAmt), steel, uMetal), 1.0);
+        vec3 cold = mix(mix(rock, pow(uSeam, g22), seam * uSeamAmt), steel, uMetal);
+        // Heated: the cracks go first, then the whole face starts to glow. Lava is rock with this turned all the way up.
+        float crack = 1.0 - smoothstep(0.0, 0.22, abs(vnoise(vObj * 4.0 + 9.0) - 0.5));
+        vec3 glow = mix(vec3(0.95, 0.18, 0.02), vec3(1.0, 0.82, 0.3), crack) * (0.25 + 0.75 * crack);
+        gl_FragColor = vec4(mix(cold, cold * 0.35 + glow, uHeat), 1.0);
       }`,
   });
 }
@@ -1028,8 +1033,8 @@ function craggy(geo, amount) {
 }
 
 // --- particles ---
-const P_MAX = 2000;
-const particles = (() => {
+// additive: glowing motes that add light. Otherwise: soft opaque puffs that sit in the air like smoke.
+function makePool(P_MAX, additive) {
   const pos = new Float32Array(P_MAX * 3), vel = new Float32Array(P_MAX * 3), col = new Float32Array(P_MAX * 3);
   const size = new Float32Array(P_MAX), alpha = new Float32Array(P_MAX);
   const life = new Float32Array(P_MAX), span = new Float32Array(P_MAX), grav = new Float32Array(P_MAX), drag = new Float32Array(P_MAX);
@@ -1040,7 +1045,7 @@ const particles = (() => {
   geo.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
   const mat = new THREE.ShaderMaterial({
     uniforms: { uHalfH: { value: 400 } },
-    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, depthTest: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     vertexShader: /* glsl */`
       attribute float aSize; attribute float aAlpha; attribute vec3 color;
       uniform float uHalfH; varying vec3 vCol; varying float vA;
@@ -1055,12 +1060,12 @@ const particles = (() => {
       void main() {
         float d = length(gl_PointCoord - 0.5);
         float a = pow(smoothstep(0.5, 0.0, d), 1.6) * vA;
-        gl_FragColor = vec4(vCol * a, a);
+        gl_FragColor = ${additive ? 'vec4(vCol * a, a)' : 'vec4(vCol, a * 0.42)'};
       }`,
   });
   const points = new THREE.Points(geo, mat);
   points.frustumCulled = false;
-  points.renderOrder = 18;
+  points.renderOrder = additive ? 18 : 13;
   scene.add(points);
   let cursor = 0, liveCount = 0;
   return {
@@ -1083,13 +1088,28 @@ const particles = (() => {
         vel[i * 3] *= k; vel[i * 3 + 1] = vel[i * 3 + 1] * k - grav[i] * dt; vel[i * 3 + 2] *= k;
         pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
         const f = Math.max(life[i] / span[i], 0);
-        alpha[i] = Math.min(f * 2.2, 1);          // hold, then fade out over the last half
+        alpha[i] = additive ? Math.min(f * 2.2, 1) : Math.min(f * 2.2, (1 - f) * 6, 1);   // glow holds then fades; smoke also swells in
+        if (!additive) size[i] += dt * 0.12;        // and spreads as it hangs
         liveCount++;
       }
       for (const name of ['position', 'color', 'aSize', 'aAlpha']) geo.attributes[name].needsUpdate = true;
     },
   };
-})();
+}
+const particles = makePool(2000, true);
+const smoke = makePool(600, false);
+const SMOKE = new THREE.Color(0x26221f), STEAM = new THREE.Color(0xe6ecee), DUST = new THREE.Color(0x9c8763), SAND = new THREE.Color(0xc9ad74);
+const _fv = new THREE.Vector3(), _fp = new THREE.Vector3();
+// Soft puffs: smoke off a fire, dust off broken stone, steam, sand.
+function fume(color, point, n, o = {}) {
+  for (let i = 0; i < n; i++) {
+    _fv.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(o.speed ?? 0.5);
+    _fv.y += o.rise ?? 0.4;
+    const j = o.jitter ?? 0.15;
+    _fp.set(point.x + (Math.random() - 0.5) * j, point.y + (Math.random() - 0.5) * j, point.z + (Math.random() - 0.5) * j);
+    smoke.emit(_fp, _fv, color, (o.size ?? 0.22) * (0.7 + Math.random() * 0.6), (o.life ?? 1.4) * (0.7 + Math.random() * 0.6), o.grav ?? 0, o.drag ?? 1.2);
+  }
+}
 
 const PCOL = {
   pyro: [0xffe08a, 0xff8a1f, 0xff3b0a].map(c => new THREE.Color(c)),
@@ -1147,6 +1167,8 @@ function updateEffects(t, dt) {
 function impact(point, normal, key, t, size = 0.22) {
   const color = ELEMENTS[key].color;
   puff(key, point, key === 'terra' ? 22 : 16, key === 'aero' ? 3 : 2.2, { dir: normal, spread: 0.9 });
+  if (key === 'terra') fume(DUST, point, 4, { size: 0.28, rise: 0.3 });
+  if (key === 'pyro') fume(SMOKE, point, 3, { size: 0.26, rise: 0.8 });
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 1, 28), glowMat(color, 0.9));
   ring.position.copy(point).addScaledVector(normal, 0.01);
   ring.lookAt(ring.position.clone().add(normal));
@@ -1298,14 +1320,26 @@ function castBolt(key, m, c) {
         if (!m.pierce) return stop(e.group.position.clone(), t);
       }
     }
+    if (m.freeze || key === 'pyro') {               // standing water in the path changes state
+      for (const src of [...sources]) {
+        if (segmentDistance(src.pos, prev, end || mesh.position) > 0.45) continue;
+        if (m.freeze) freezeSource(src, t); else evaporate(src, t);
+        return stop(src.pos.clone(), t);
+      }
+    }
     for (const o of objects) {                      // loose objects get knocked, lit, or broken
-      if (o.dead || o.held || knocked.has(o)) continue;
+      if (o.dead || o.held || knocked.has(o) || o.def.cloud) continue;
       if (segmentDistance(o.pos, prev, end || mesh.position) > o.def.r + 0.06) continue;
       knocked.add(o);
       dirN.copy(vel).normalize();
       const push = Math.min(m.speed * 0.6, 7);
       kick(o, dirN.x * push, 1.2, dirN.z * push);
       if (key === 'pyro') ignite(o, t);
+      if (m.freeze && o.def.water) {                // a barrel frozen solid splits into blocks of ice
+        o.dead = true; puff('aqua', o.pos, 30, 2, {});
+        for (let k = 0; k < 3; k++) spawnObject('ice', o.pos.clone().add(new THREE.Vector3((k - 1) * 0.25, 0.1, 0)));
+        hudNote = 'water to ice'; drawHud();
+      }
       if ((m.shape === 'rock' || m.shape === 'disc') && (o.def.burns || o.def.water)) destroyObject(o, t);
       if (!m.pierce) { impact(o.pos, dirN.clone().negate(), key, t, 0.25); return stop(o.pos.clone(), t); }
     }
@@ -1332,6 +1366,9 @@ function castCone(key, m, c) {
     if (!isLive(e, c.t)) continue;
     _to.copy(e.group.position).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, e.group.position)) hit(e, key, c.t, d, m);
+  }
+  if (key === 'pyro') {
+    for (const src of [...sources]) { _to.copy(src.pos).sub(origin); if (_to.length() < m.range && _to.angleTo(d) < m.angle + 0.15) evaporate(src, c.t); }
   }
   for (const b of [...barriers]) {                // a shove sends a standing wall on its way
     _to.copy(b.collider.position).setY(origin.y).sub(origin);
@@ -1455,6 +1492,7 @@ function castColumn(key, m, c) {
   if (m.pulse) firePulse(base);                  // Terra's eruption also ripples the room
   if (key === 'aqua') addSource(base, axis, c.t, 20);     // where water came up, it keeps coming for a while
   puff(key, base, key === 'terra' ? 40 : 24, 2.4, { up: 2.5, jitter: 0.2 });
+  if (key === 'terra') fume(DUST, base, 7, { size: 0.35, jitter: 0.5, rise: 0.5, life: 1.8 });
   const born = c.t;
   const top = new THREE.Vector3();
   let struck = false, spin = Math.random() * 6.28;
@@ -1470,7 +1508,7 @@ function castColumn(key, m, c) {
     // Loose matter while it stands: embers climb off fire, a geyser's crown rains down, wind winds upward.
     const tall = column.scale.y;
     if (sink < 1 && rise >= 1) {
-      if (key === 'pyro') { top.copy(base).setY(Math.random() * tall); puff(key, top, 3, 0.7, { up: 1.8, jitter: 0.22 }); }
+      if (key === 'pyro') { top.copy(base).setY(Math.random() * tall); puff(key, top, 3, 0.7, { up: 1.8, jitter: 0.22 }); if (Math.random() < 0.25) fume(SMOKE, top.setY(tall), 1, { rise: 1.1, size: 0.3, life: 1.8 }); }
       else if (key === 'aqua') { top.copy(base).setY(tall); puff(key, top, 4, 1.6, { up: 1.2, jitter: 0.1 }); }
       else if (key === 'aero') {
         spin += dt * 14;
@@ -1490,6 +1528,7 @@ function castColumn(key, m, c) {
         kick(o, axis.x * 6, axis.y * 6, axis.z * 6);
         if (key === 'pyro') ignite(o, t);
       }
+      if (key === 'pyro') heatAt(base, m.radius + 0.6, t);
       if (m.stand && key === 'terra') {
         endAt = t + m.stand;
         barrier = addBarrier(new THREE.CylinderGeometry(m.bottom * 0.5 * pw, m.bottom * pw, height, 8).translate(0, height / 2, 0), column, {
@@ -1548,6 +1587,7 @@ function castRing(key, m, c) {
         hit(e, key, t, _to.set(p.x - centre.x, 0.6, p.z - centre.z).normalize(), m);
       }
     }
+    if (key === 'pyro') for (const src of [...sources]) if (Math.hypot(src.pos.x - centre.x, src.pos.z - centre.z) < r && Math.abs(src.pos.y - centre.y) < 0.6) evaporate(src, t);
     for (const o of objects) {
       if (o.dead || o.held || struck.has(o) || Math.hypot(o.pos.x - centre.x, o.pos.z - centre.z) > r) continue;
       struck.add(o);
@@ -1583,6 +1623,7 @@ function castWall(key, m, c) {
     wall.add(new THREE.Mesh(craggy(new THREE.BoxGeometry(m.width, m.height, 0.22, 9, 6, 2).translate(0, m.height / 2, 0), 0.07), stoneMat()));
   }
   puff(key, centre, 36, 2.2, { up: 2, jitter: m.width * 0.8 });
+  if (key === 'terra') fume(DUST, centre, 10, { size: 0.4, jitter: m.width, rise: 0.5, life: 2 });
   const foam = new THREE.Vector3();
   wall.position.copy(centre);
   wall.rotation.y = Math.atan2(d.x, d.z);
@@ -1709,7 +1750,7 @@ function castFault(key, m, c) {
       const rise = THREE.MathUtils.clamp(age / 0.1, 0, 1);
       const sink = THREE.MathUtils.clamp((age - 0.8) / 0.3, 0, 1);
       s.g.scale.y = Math.max(s.h * rise * (1 - sink), 0.001);
-      if (!s.dusted && age > 0) { s.dusted = true; puff(key, s.at, 12, 2, { up: 2.2, jitter: 0.12 }); }
+      if (!s.dusted && age > 0) { s.dusted = true; puff(key, s.at, 12, 2, { up: 2.2, jitter: 0.12 }); fume(DUST, s.at, 2, { size: 0.3, rise: 0.5 }); }
       if (!s.struck && rise >= 1) {
         s.struck = true;
         for (const e of echoes) {
@@ -1922,7 +1963,11 @@ const OBJ = {
   anvil:    { r: 0.22, mass: 5, bounce: 0.25, key: 'terra', earth: true },               // a block of iron
   shard:    { r: 0.09, mass: 0.5, bounce: 0.3, key: 'terra', earth: true },              // what the creatures spit
   barrel:   { r: 0.26, mass: 2, bounce: 0.25, key: 'aqua', water: true },                // full of water: break it and you have a source
+  ice:      { r: 0.17, mass: 1.5, bounce: 0.2, key: 'aqua', ice: true },                 // frozen water: slides, freezes what it hits, melts back
+  steam:    { r: 0.6, mass: 0.4, bounce: 0, key: 'aero', cloud: true },                  // boiled water: scalds, drifts, can be blown or held
+  sand:     { r: 0.6, mass: 0.7, bounce: 0, key: 'terra', earth: true, cloud: true },    // ground stone: blinds what is inside it
 };
+const HEAT_TIME = 10;                               // seconds stone and steel stay hot
 const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'barrel', 'barrel', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
 const MAX_OBJECTS = 24;
 const GRIP = { aero: 'Wind Grip', aqua: 'Water Grip', terra: 'Unearth', pyro: 'Fireball' };
@@ -1932,6 +1977,11 @@ scene.add(objGroup);
 
 function objectMesh(kind) {
   if (kind === 'crate') return new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32, 3, 3, 3), stoneMat(false, { dark: 0x2b1708, light: 0x8f5c2a, seam: 0x1a0d04, amt: 0.9, grain: [1.5, 22, 1.5] }));
+  if (kind === 'ice') {
+    const g = craggy(new THREE.IcosahedronGeometry(0.17, 1), 0.07); g.computeVertexNormals();
+    return new THREE.Mesh(g, waterMat({ flow: [0, 0, 0], scale: [10, 10, 10], amp: 0, body: 0.45 }));
+  }
+  if (OBJ[kind].cloud) return new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 3), glowMat(STEAM, 0));
   if (kind === 'barrel') return new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5, 14, 4), stoneMat(false, { dark: 0x1c2a30, light: 0x5f7f88, seam: 0x10181c, amt: 0.9, grain: [2, 14, 2] }));
   if (kind === 'keg') return new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 12, 3), stoneMat(false, { dark: 0x3a0a06, light: 0xc22d18, seam: 0xffc21a, amt: 0.9, grain: [3, 9, 3] }));
   if (kind === 'ball') return new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 2), stoneMat(true));
@@ -1963,6 +2013,7 @@ function destroyObject(o, t) {
   if (o.dead) return;
   o.dead = true;
   puff(o.def.key === 'pyro' ? 'pyro' : 'terra', o.pos, 34, 3.2, { up: 1.5 });
+  fume(DUST, o.pos, 5, { size: 0.3, jitter: 0.4 });
   thud();
   if (o.def.water) {                                // it spills, and what it spills on stays wet
     puff('aqua', o.pos, 60, 3, { up: 2 });
@@ -1994,8 +2045,48 @@ function scatterObjects() {
     }
   }
 }
+function spawnCloud(kind, pos, t, life = 9) {
+  const o = spawnObject(kind, pos);
+  o.until = t + life;
+  fume(kind === 'steam' ? STEAM : SAND, pos, 16, { size: 0.4, jitter: 0.7, life: 1.6 });
+  return o;
+}
+// Phase changes of water.
+function freezeSource(src, t) {
+  const i = sources.indexOf(src);
+  if (i < 0) return;
+  sources.splice(i, 1); scene.remove(src.mesh); src.mesh.geometry.dispose(); src.mesh.material.dispose();
+  for (let k = 0; k < 2; k++) spawnObject('ice', src.pos.clone().addScaledVector(src.normal, 0.2).add(new THREE.Vector3((k - 0.5) * 0.3, 0, (Math.random() - 0.5) * 0.2)));
+  puff('aqua', src.pos, 30, 1.6, { dir: src.normal, spread: 0.9 });
+  tone(1900, 2600, 0.2, 0.08, 'triangle');
+  hudNote = 'water to ice'; drawHud();
+}
+function evaporate(src, t) {
+  const i = sources.indexOf(src);
+  if (i < 0) return;
+  sources.splice(i, 1); scene.remove(src.mesh); src.mesh.geometry.dispose(); src.mesh.material.dispose();
+  spawnCloud('steam', src.pos.clone().addScaledVector(src.normal, 0.55), t);
+  tone(1400, 400, 0.6, 0.06, 'sawtooth');
+  hudNote = 'water to steam'; drawHud();
+}
+// Fire reaching a place: boils any water standing there.
+function heatAt(point, radius, t) {
+  for (const src of [...sources]) if (src.pos.distanceTo(point) < radius) evaporate(src, t);
+}
 function ignite(o, t) {
   if (o.dead) return;
+  if (o.def.ice) {                                  // ice melts back to standing water
+    o.dead = true;
+    const under = nearestRoomSurface(o.pos, 2.5);
+    addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t, 20);
+    hudNote = 'ice to water'; drawHud();
+    return;
+  }
+  if (o.def.earth && !o.def.cloud && o.kind !== 'shard') {                // stone and steel take the heat and keep it
+    if (!(o.heat > t)) { hudNote = o.kind === 'ball' || o.kind === 'anvil' ? 'red hot' : 'molten'; drawHud(); }
+    o.heat = t + HEAT_TIME;
+    return;
+  }
   if (o.def.explodes) { if (o.fuse < 0) o.fuse = t + 0.35; }
   else if (o.def.burns && o.burnUntil < 0) o.burnUntil = t + 2.5;
 }
@@ -2010,6 +2101,8 @@ function explode(point, key, radius, t, dmg) {
   const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), energyMat('pyro', { scale: [4, 4, 4], flow: [0, 0.6, 0], cut: 0.22 }));
   ball.position.copy(centre);
   puff('pyro', centre, 80, radius * 4, { life: 0.5 });
+  fume(SMOKE, centre, 10, { size: 0.5, jitter: radius, rise: 0.9, life: 2.2 });
+  if (key === 'pyro') heatAt(centre, radius, t);
   thump(); tone(260, 40, 0.5, 0.35, 'sawtooth');
   addEffect([ball], (n) => {
     const k = (n - t) / 0.32;
@@ -2040,6 +2133,7 @@ function crushObject(o, t) {
   addEffect([shell], (n) => { const k = (n - t) / 0.18; shell.scale.setScalar(Math.max(0.45 * (1 - k), 0.02)); shell.rotation.y += 0.4; return k < 1; });
   if (o.def.explodes) { o.dead = true; explode(p, 'pyro', 1.7, t, 2); return; }
   destroyObject(o, t);
+  if (o.kind === 'stone' || o.kind === 'boulder') { spawnCloud('sand', p, t, o.kind === 'boulder' ? 12 : 8); hudNote = 'stone to sand'; }
   const heavy = o.def.mass >= 2;
   for (const e of echoes) {                                // the pieces go everywhere
     if (isLive(e, t) && e.group.position.distanceTo(p) < 1.2) hit(e, heavy ? 'terra' : 'aero', t, e.group.position.clone().sub(p).normalize(), { damage: heavy ? 2 : 1 });
@@ -2052,12 +2146,33 @@ function updateObjects(t, dt) {
     const o = objects[i];
     if (o.dead) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); objects.splice(i, 1); continue; }
     const r = o.def.r;
+    if (o.def.cloud) {                              // a cloud: no weight, drifts, slowly thins, does its work on what is inside
+      if (t > o.until) { o.dead = true; continue; }
+      if (!o.held) o.vel.multiplyScalar(Math.max(1 - 1.3 * dt, 0));
+      o.vel.clampLength(0, 3.5);                    // it drifts; it does not fly
+      o.pos.addScaledVector(o.vel, dt);
+      const cbox = roomBounds();                    // and it stays in the room
+      o.pos.set(THREE.MathUtils.clamp(o.pos.x, cbox.min.x, cbox.max.x), THREE.MathUtils.clamp(o.pos.y, 0.45, 2.1), THREE.MathUtils.clamp(o.pos.z, cbox.min.z, cbox.max.z));
+      const thin = Math.min((o.until - t) / 2, 1);
+      if (Math.random() < 0.55 * thin) fume(o.kind === 'steam' ? STEAM : SAND, o.pos, 1, { size: 0.42, jitter: r * 1.5, life: 1.3, rise: o.kind === 'steam' ? 0.25 : 0, speed: 0.3 });
+      for (const e of echoes) {
+        if (e.down || e.home.distanceTo(o.pos) > r + 0.15) continue;
+        if (o.kind === 'sand') { e.blindUntil = t + 0.7; reveal(e, t, 1.2, SAND); }
+        else if (t - (e.scaldT || -9) > 0.9) { e.scaldT = t; reveal(e, t, 2, STEAM); hudNote = 'scald'; hit(e, 'pyro', t, ZERO, { damage: 1, noBurn: true }); }
+      }
+      o.mesh.position.copy(o.pos);
+      continue;
+    }
+    const hot = o.heat > t;
+    if (o.mesh.material.uniforms && o.mesh.material.uniforms.uHeat) o.mesh.material.uniforms.uHeat.value = hot ? Math.min((o.heat - t) / 2.5, 1) : 0;
+    if (hot && Math.random() < 0.4) puff('pyro', o.pos, 1, 0.5, { up: 1, jitter: r });
     if (o.fuse > 0) {
       puff('pyro', o.pos, 2, 1.5, { up: 2, life: 0.25 });
       if (t >= o.fuse) { const p = o.pos.clone(); o.dead = true; explode(p, 'pyro', 1.7, t, 2); continue; }
     }
     if (o.burnUntil > 0) {
       puff('pyro', o.pos, 2, 0.6, { up: 1.6, jitter: 0.25 });
+      if (Math.random() < 0.3) fume(SMOKE, _op.copy(o.pos).setY(o.pos.y + 0.3), 1, { rise: 1.1, size: 0.32, life: 2 });
       if (t >= o.burnUntil) {
         destroyObject(o, t);
         for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(o.pos) < 0.9) hit(e, 'pyro', t, UP, { damage: 1 });
@@ -2104,7 +2219,7 @@ function updateObjects(t, dt) {
         o.pos.y = groundY + r;
         if (o.vel.y < 0) { o.vel.y = o.vel.y < -1.2 ? -o.vel.y * o.def.bounce : 0; }
         if (!o.held) {
-          const grip = Math.max(1 - (o.kind === 'ball' ? 0.8 : 3) * dt, 0);      // boxes scrape to a stop, the ball keeps rolling
+          const grip = Math.max(1 - (o.kind === 'ball' ? 0.8 : o.def.ice ? 0.5 : 3) * dt, 0);      // boxes scrape to a stop; the ball rolls and ice slides
           o.vel.x *= grip; o.vel.z *= grip;
           if (o.vel.length() < 0.25) { o.vel.set(0, 0, 0); o.rest = true; }
         }
@@ -2116,7 +2231,13 @@ function updateObjects(t, dt) {
         for (const e of echoes) {
           if (!isLive(e, t) || e.group.position.distanceTo(o.pos) > r + 0.14) continue;
           o.hitT = t;
+          if (o.def.ice) {                         // a thrown block of ice freezes what it hits, and breaks
+            hit(e, 'aqua', t, _od, { damage: 1, freeze: true });
+            o.dead = true; puff('aqua', o.pos, 30, 2.6, {});
+            break;
+          }
           hit(e, o.def.earth ? 'terra' : 'aero', t, _od, { damage: o.def.mass >= 2 || o.turned ? 2 : 1 });
+          if (hot && !e.down) e.burnAt = t + 1.5;  // molten rock leaves it burning
           if (o.kind === 'shard') { o.dead = true; break; }
           if (o.def.explodes && speed > 4) ignite(o, t);
           o.vel.multiplyScalar(-0.35);
@@ -2132,7 +2253,7 @@ function updateObjects(t, dt) {
     if (a.dead) continue;
     for (let j = i + 1; j < objects.length; j++) {
       const b = objects[j];
-      if (b.dead || (a.rest && b.rest)) continue;
+      if (b.dead || (a.rest && b.rest) || a.def.cloud || b.def.cloud) continue;
       if (a.hostile || b.hostile) {                 // a shard breaks on anything you put in its way
         if (a.pos.distanceTo(b.pos) < a.def.r + b.def.r) { (a.hostile ? a : b).dead = true; tick(); }
         continue;
@@ -2155,6 +2276,8 @@ function updateObjects(t, dt) {
         if (closing < -6) { if (a.def.explodes) ignite(a, t); if (b.def.explodes) ignite(b, t); }
       }
       a.rest = b.rest = false;
+      if (a.heat > t && !b.def.earth) ignite(b, t);       // hot stone sets light to what it touches, and melts ice
+      if (b.heat > t && !a.def.earth) ignite(a, t);
       a.mesh.position.copy(a.pos); b.mesh.position.copy(b.pos);
     }
   }
@@ -2240,6 +2363,7 @@ function castWhip(key, m, c) {
   const tip = new THREE.Vector3(), prevTip = tipAt(0, new THREE.Vector3()), mid = new THREE.Vector3();
   const whip = new THREE.Mesh(new THREE.BufferGeometry(), waterMat({ flow: [0, 3, 0], scale: [8, 3, 8], amp: 0, body: 0.35 }));
   const born = c.t, DUR = 0.3;
+  let angPrev = -half;
   addEffect([whip], (t) => {
     const k = Math.min((t - born) / DUR, 1);
     tipAt(k, tip);
@@ -2249,15 +2373,19 @@ function castWhip(key, m, c) {
     whip.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([origin, origin.clone().lerp(mid, 0.5), mid, mid.clone().lerp(tip, 0.6), tip.clone()]), 22, 0.028 * (m.power || 1), 8, false);
     puff(key, tip, 3, 1.4, {});
     // Anything between the last tip position and this one, out to the reach, has been lashed.
+    // Everything in the wedge the cord has swept since last frame, out to its reach, has been lashed.
+    const angNow = (k * 2 - 1) * half;
     for (const e of echoes) {
       if (!isLive(e, t) || struck.has(e)) continue;
       const p = e.group.position;
-      if (segmentDistance(p, prevTip, tip) < 0.45 || (segmentDistance(p, origin, tip) < 0.3)) {
-        if (!lineOfSight(origin, p)) continue;
-        struck.add(e);
-        hit(e, key, t, _to.copy(tip).sub(prevTip).normalize(), m);
-      }
+      _to.copy(p).sub(origin);
+      const ang = Math.atan2(_to.dot(side), _to.dot(aim));
+      if (ang < angPrev - 0.12 || ang > angNow + 0.12 || Math.hypot(_to.dot(side), _to.dot(aim)) > reach + 0.25 || Math.abs(_to.y - tilt * reach) > 0.75) continue;
+      if (!lineOfSight(origin, p)) continue;
+      struck.add(e);
+      hit(e, key, t, _to.copy(tip).sub(prevTip).normalize(), m);
     }
+    angPrev = angNow;
     for (const o of objects) {
       if (o.dead || o.held || struck.has(o) || segmentDistance(o.pos, origin, tip) > o.def.r + 0.15) continue;
       struck.add(o);
@@ -2615,7 +2743,7 @@ function updateHeldSenses(t) {
   if (p) {
     for (const o of objects) {
       if (o.dead || g >= chiGhosts.length) continue;
-      const hot = o.burnUntil > 0 || o.fuse > 0 || o.heat > 0 || o.def.explodes;
+      const hot = o.burnUntil > 0 || o.fuse > 0 || o.heat > t || o.def.explodes || o.kind === 'steam';
       const ghost = chiGhosts[g++];
       ghost.visible = true;
       ghost.position.copy(o.pos);
@@ -3224,6 +3352,8 @@ renderer.setAnimationLoop((ms, frame) => {
   const layer = frame && renderer.xr.isPresenting ? frame.session.renderState.baseLayer : null;
   particles.material.uniforms.uHalfH.value = layer ? (layer.framebufferHeight || 1800) / 2 : renderer.domElement.height / 2;
   particles.update(dt);
+  smoke.material.uniforms.uHalfH.value = particles.material.uniforms.uHalfH.value;
+  smoke.update(dt);
   renderer.render(scene, camera);
 });
 
@@ -3234,6 +3364,7 @@ window.__tremor = {
   get draftOn() { return now() < draftUntil; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
   barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit, sources, addSource, water,
+  spawnCloud, smoke, ignite,
   get hp() { return playerHP; }, attackSoon() { nextAttackAt = 0; },
   setHold(h) { previewHold = h; },
   get down() { return downCount; },

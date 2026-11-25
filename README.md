@@ -240,3 +240,15 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
 - **Glaive.** Holds itself toward where the hand points and sways, with vertebrae along it; it no longer hangs like
   the water stream.
 - **Own sounds** for the Eclipse zone, snapper bite and spit, Spear Hand, light blade, and each familiar's shot.
+
+## Code layout
+
+`main.js` only loads the modules in `src/`, in order. One module per subject:
+`data` (tables: disciplines, moves, forms, creature kinds, tuning), `audio`, `state`, `core`, `renderer`, `pulse`
+(the room shader), `room`, `collision`, `echoes`, `creatures`, `visuals`, `effects`, `flourish`, `objects`, `water`,
+`grip`, `constructs`, `seal`, `guard`, `shaping`, `senses`, `selection`, `hud`, `hands`, `preview`, `session`, `loop`.
+
+- `state.js` holds `S`, every value that changes during play and is shared between modules (current discipline,
+  health, wave, HUD text), and `L`, a late-bound registry so a module can call into one that loads after it.
+- A module imports directly from modules that load before it, and reaches later ones through `L`.
+- Every import carries the same `?v=` tag as `index.html`. Bump them together, or a browser will mix builds.

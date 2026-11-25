@@ -56,7 +56,7 @@ const DRAFT_SENSE = { speed: 9, lasts: 9 };    // the air of the whole room, for
 const ACID = new THREE.Color(0xb6ff3c);
 const ELEMENTS = {
   pyro:  { label: 'PYRO',  sense: 'Chi Sense',    color: new THREE.Color(0xff6a1a) },
-  aqua:  { label: 'AQUA',  sense: 'Tide Sense',   color: new THREE.Color(0x2bb8ff) },
+  aqua:  { label: 'AQUA',  sense: 'Tide Sense',   color: new THREE.Color(0xa9dbe6) },
   terra: { label: 'TERRA', sense: 'Tremor Sense', color: new THREE.Color(0xe0b64a) },
   aero:  { label: 'AERO',  sense: 'Draft Sense',  color: new THREE.Color(0xdff9ff) },
 };
@@ -75,13 +75,13 @@ const MOVES = {
     grip:  { name: 'Fireball',    kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
   },
   aqua: {
-    punch: { name: 'Jet',         kind: 'bolt',   speed: 12, radius: 0.18, shape: 'jet', pierce: true },
+    punch: { name: 'Globe',       kind: 'bolt',   speed: 9, radius: 0.24, shape: 'blob', size: 0.085 },
     shove: { name: 'Breaker',     kind: 'wall',   ram: 6, width: 2.2, height: 1.2, passThrough: true },
     lift:  { name: 'Geyser',      kind: 'column', launch: true, radius: 0.32, top: 0.1, bottom: 0.1, sides: 16 },
-    sweep: { name: 'Riptide',     kind: 'bolt',   speed: 5,  radius: 0.22, shape: 'crescent', size: 0.16, pierce: true, homing: 7, life: 2.6 },
+    sweep: { name: 'Whip',        kind: 'whip',   range: 3.4, arc: 1.05 },
     slam:  { name: 'Surge',       kind: 'ring',   maxR: 4.2, height: 1.1, launch: true },
     point: { name: 'Frost Needle', kind: 'bolt',  speed: 14, radius: 0.2, shape: 'shard', freeze: true },
-    grip:  { name: 'Puppetry',    kind: 'grip' },
+    grip:  { name: 'Water Grip',  kind: 'grip' },
   },
   terra: {
     punch: { name: 'Stone Shot',  kind: 'bolt',   speed: 8,  radius: 0.28, shape: 'rock', gravity: 2.5 },
@@ -99,7 +99,7 @@ const MOVES = {
     sweep: { name: 'Air Blade',   kind: 'bolt',   speed: 11, radius: 0.4, shape: 'crescent', size: 0.4, pierce: true },
     slam:  { name: 'Shockwave',   kind: 'ring',   maxR: 4.5, height: 2.2 },
     point: { name: 'Void',        kind: 'void',   radius: 1.5, range: 10 },
-    grip:  { name: 'Telekinesis', kind: 'grip' },
+    grip:  { name: 'Wind Grip',   kind: 'grip' },
   },
 };
 
@@ -603,6 +603,7 @@ function scatterEchoes() {
   downCount = 0;
   playerHP = MAX_HP;
   draftUntil = -1;
+  clearSources(); water.amount = 0;
   nextAttackAt = now() + CREATURE.firstAttack;
   scatterObjects();
   drawHud();
@@ -902,7 +903,52 @@ const ENERGY = {
   aero: { a: 0xffffff, b: 0xbfeeff, scale: [16, 1.6, 16], speed: 4.5, cut: 0.56, soft: 0.16 },
 };
 // flow is the direction the pattern travels, in the mesh's own space. fadeY (0 to 1) thins it out toward the top of the mesh.
+// Water: mostly clear. You see it by its edges, its highlights and the light moving inside it, not by a colour.
+function waterMat(o = {}) {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: pulseUniforms.uTime,
+      uScale: { value: new THREE.Vector3(...(o.scale || [5, 4, 5])) },
+      uFlow: { value: new THREE.Vector3(...(o.flow || [0, 1, 0])).multiplyScalar(1.6) },
+      uAmp: { value: o.amp ?? 0 }, uBody: { value: o.body ?? 0.14 }, uOpacity: { value: 1 },
+    },
+    transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+    vertexShader: /* glsl */`
+      uniform float uTime, uAmp; uniform vec3 uScale, uFlow;
+      varying vec3 vObj, vN, vV;
+      ${NOISE_GLSL}
+      void main() {
+        vec3 p = position + normal * (fbm(position * 2.2 + vec3(0.0, uTime * 1.3, uTime * 0.7)) - 0.5) * uAmp * 2.0;   // a slow wobble
+        vObj = position;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vN = normalMatrix * normal; vV = -mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */`
+      uniform float uTime, uBody, uOpacity; uniform vec3 uScale, uFlow;
+      varying vec3 vObj, vN, vV;
+      ${NOISE_GLSL}
+      void main() {
+        vec3 q = vObj * uScale - uFlow * uTime;
+        float f = fbm(q);
+        vec3 n = normalize(vN + (vec3(fbm(q + 3.1), fbm(q + 7.7), f) - 0.5) * 0.9);      // the surface is never still
+        vec3 v = normalize(vV);
+        float ndv = abs(dot(n, v));
+        float rim = pow(1.0 - ndv, 2.6);                                                    // edges bend the most light
+        vec3 l = normalize(vec3(0.3, 0.9, 0.45));
+        float glint = pow(max(dot(reflect(-l, n), v), 0.0), 60.0) + 0.5 * pow(max(dot(reflect(-l, -n), v), 0.0), 40.0);
+        float caustic = smoothstep(0.56, 0.74, f) * 0.35;
+        vec3 col = mix(vec3(0.70, 0.84, 0.86), vec3(0.96, 0.99, 1.0), clamp(rim + caustic, 0.0, 1.0)) + glint;
+        float a = clamp(uBody + 0.62 * rim + caustic * 0.5 + glint, 0.0, 0.95) * uOpacity;
+        gl_FragColor = vec4(col, a);
+      }`,
+  });
+  mat.opacity = o.opacity ?? 1;
+  mat.onBeforeRender = () => { mat.uniforms.uOpacity.value = mat.opacity; };
+  return mat;
+}
 function energyMat(key, o = {}) {
+  if (key === 'aqua') return waterMat({ flow: o.flow, scale: o.scale, opacity: o.opacity, body: o.fadeY ? 0.1 : 0.16 });
   const P = ENERGY[key];
   const mat = new THREE.ShaderMaterial({
     uniforms: {
@@ -1047,7 +1093,7 @@ const particles = (() => {
 
 const PCOL = {
   pyro: [0xffe08a, 0xff8a1f, 0xff3b0a].map(c => new THREE.Color(c)),
-  aqua: [0xe6fbff, 0x63ccff, 0x1487ff].map(c => new THREE.Color(c)),
+  aqua: [0xf4fcff, 0xcfe7ec, 0x9cc6cf].map(c => new THREE.Color(c)),      // clear water catches light; it is not blue paint
   terra: [0xcdb78c, 0x8a7655, 0xe0b64a].map(c => new THREE.Color(c)),
   aero: [0xffffff, 0xdff9ff, 0xbfeeff].map(c => new THREE.Color(c)),
 };
@@ -1143,6 +1189,12 @@ function boltMesh(key, m, color) {
     const disc = new THREE.Mesh(craggy(new THREE.CylinderGeometry(0.12, 0.12, 0.022, 10, 1), 0.03), stoneMat(true));
     disc.name = 'spin';
     g.add(disc);
+  } else if (m.shape === 'blob') {
+    // A fistful of water holding together in the air, pulled long by its own speed.
+    const s = size || 0.085;
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 24, 18), waterMat({ flow: [0, 0, -1.2], scale: [9, 9, 9], amp: s * 0.5, body: 0.2 }));
+    blob.geometry.scale(1, 1, 1.5);
+    g.add(blob);
   } else if (m.shape === 'jet') {
     const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.075, 1.3, 16, 8, true), energyMat(key, { flow: [0, 0, -2.5], scale: [12, 12, 3], cut: 0.1 }));
     jet.geometry.rotateX(Math.PI / 2).translate(0, 0, -0.6);
@@ -1254,7 +1306,7 @@ function castBolt(key, m, c) {
       const push = Math.min(m.speed * 0.6, 7);
       kick(o, dirN.x * push, 1.2, dirN.z * push);
       if (key === 'pyro') ignite(o, t);
-      if (m.shape === 'rock' && o.kind === 'crate') destroyObject(o, t);
+      if ((m.shape === 'rock' || m.shape === 'disc') && (o.def.burns || o.def.water)) destroyObject(o, t);
       if (!m.pierce) { impact(o.pos, dirN.clone().negate(), key, t, 0.25); return stop(o.pos.clone(), t); }
     }
     if (end) { impact(wall.point, wall.normal, key, t, m.shape === 'rock' ? 0.4 : 0.25); return stop(wall.point.clone(), t); }
@@ -1401,6 +1453,7 @@ function castColumn(key, m, c) {
   };
   column.scale.set(pw, 0.001, pw);
   if (m.pulse) firePulse(base);                  // Terra's eruption also ripples the room
+  if (key === 'aqua') addSource(base, axis, c.t, 20);     // where water came up, it keeps coming for a while
   puff(key, base, key === 'terra' ? 40 : 24, 2.4, { up: 2.5, jitter: 0.2 });
   const born = c.t;
   const top = new THREE.Vector3();
@@ -1468,6 +1521,7 @@ function castRing(key, m, c) {
   );
   rim.position.copy(centre);
   puff(key, centre, 30, 3, { up: 2, jitter: 0.1 });
+  if (key === 'aqua') addSource(centre, UP, c.t, 20);
   const edge = new THREE.Vector3();
   const struck = new Set();
   const born = c.t;
@@ -1821,7 +1875,7 @@ function castVoid(key, m, c) {
   });
 }
 
-const KIND = { bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid };
+const KIND = { bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
 
 // Both hands together: the same move, bigger and one point harder.
 function empowered(key, m, power) {
@@ -1841,10 +1895,16 @@ function cast(key, gesture, c) {
   let m = MOVES[key][gesture];
   if (!m) return;
   if (m.kind === 'grip') return;                    // holds are driven by beginHold / updateHold, not cast here
+  if (key === 'aqua' && water.amount >= 1) {         // carried water: the move leaves from it, and is the stronger for it
+    water.amount -= 1;
+    c.power = Math.max(c.power || 1, 1.5);
+    if (m.kind === 'bolt' || m.kind === 'whip' || m.kind === 'cone') c.hand = water.pos.clone();
+    c.wet = true;
+  }
   if (c.power > 1) m = empowered(key, m, c.power);
   lastCast = key;
   castSound[key]();
-  hudNote = (c.power > 1 ? 'twin ' : '') + m.name.toLowerCase();
+  hudNote = (c.wet ? 'full ' : c.power > 1 ? 'twin ' : '') + m.name.toLowerCase();
   drawHud();
   KIND[m.kind](key, m, c);
 }
@@ -1861,16 +1921,18 @@ const OBJ = {
   boulder:  { r: 0.42, mass: 6, bounce: 0.15, key: 'terra', earth: true },               // takes real effort to move
   anvil:    { r: 0.22, mass: 5, bounce: 0.25, key: 'terra', earth: true },               // a block of iron
   shard:    { r: 0.09, mass: 0.5, bounce: 0.3, key: 'terra', earth: true },              // what the creatures spit
+  barrel:   { r: 0.26, mass: 2, bounce: 0.25, key: 'aqua', water: true },                // full of water: break it and you have a source
 };
-const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
+const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'barrel', 'barrel', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
 const MAX_OBJECTS = 24;
-const GRIP = { aero: 'Telekinesis', aqua: 'Puppetry', terra: 'Unearth', pyro: 'Fireball' };
+const GRIP = { aero: 'Wind Grip', aqua: 'Water Grip', terra: 'Unearth', pyro: 'Fireball' };
 const objects = [];
 const objGroup = new THREE.Group();
 scene.add(objGroup);
 
 function objectMesh(kind) {
   if (kind === 'crate') return new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32, 3, 3, 3), stoneMat(false, { dark: 0x2b1708, light: 0x8f5c2a, seam: 0x1a0d04, amt: 0.9, grain: [1.5, 22, 1.5] }));
+  if (kind === 'barrel') return new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5, 14, 4), stoneMat(false, { dark: 0x1c2a30, light: 0x5f7f88, seam: 0x10181c, amt: 0.9, grain: [2, 14, 2] }));
   if (kind === 'keg') return new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 12, 3), stoneMat(false, { dark: 0x3a0a06, light: 0xc22d18, seam: 0xffc21a, amt: 0.9, grain: [3, 9, 3] }));
   if (kind === 'ball') return new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 2), stoneMat(true));
   if (kind === 'shard') {
@@ -1902,6 +1964,11 @@ function destroyObject(o, t) {
   o.dead = true;
   puff(o.def.key === 'pyro' ? 'pyro' : 'terra', o.pos, 34, 3.2, { up: 1.5 });
   thud();
+  if (o.def.water) {                                // it spills, and what it spills on stays wet
+    puff('aqua', o.pos, 60, 3, { up: 2 });
+    const under = nearestRoomSurface(o.pos, 2.5);
+    addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t);
+  }
 }
 function scatterObjects() {
   for (const o of objects) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); }
@@ -1960,6 +2027,7 @@ function explode(point, key, radius, t, dmg) {
     away.normalize();
     kick(o, away.x * 6, 3.5, away.z * 6);
     if (key === 'pyro') ignite(o, t);
+    if (o.def.water && dist < radius * 0.7) destroyObject(o, t);
   }
 }
 
@@ -2092,6 +2160,159 @@ function updateObjects(t, dt) {
   }
 }
 
+// ---------- water: sources, and the water you carry ----------
+// Aqua works best with water to hand. Put an open palm on any surface and water wells up there for a while.
+// While a source is running, water streams across the room to you and gathers at your hand, up to three measures.
+// Each Aqua move spends one and comes out bigger and harder. With none, the moves still work, at half strength.
+const sources = [];
+const SOURCE_LIFE = 35, WATER_MAX = 3, WATER_FILL = 1.3;      // seconds a source runs; measures you can carry; seconds per measure
+function addSource(point, normal, t, life = SOURCE_LIFE) {
+  if (sources.length >= 4) { const old = sources.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); old.mesh.material.dispose(); }
+  const n = (normal || UP).clone().normalize();
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(0.42, 40, 0, Math.PI * 2), waterMat({ flow: [0.25, 0.2, 0], scale: [7, 7, 7], amp: 0, body: 0.3 }));
+  mesh.position.copy(point).addScaledVector(n, 0.015);
+  mesh.lookAt(mesh.position.clone().add(n));
+  mesh.scale.setScalar(0.05);
+  mesh.renderOrder = 11;
+  scene.add(mesh);
+  const src = { pos: point.clone().addScaledVector(n, 0.05), normal: n, born: t, until: t + life, mesh };
+  sources.push(src);
+  puff('aqua', src.pos, 26, 1.8, { dir: n, spread: 0.8 });
+  castSound.aqua();
+  return src;
+}
+function clearSources() {
+  for (const s of sources) { scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); }
+  sources.length = 0;
+}
+const water = { amount: 0, pos: new THREE.Vector3(), has: false };
+const waterBlob = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), waterMat({ flow: [0, 0.4, 0], scale: [3, 3, 3], amp: 0.16, body: 0.2 }));
+waterBlob.visible = false; waterBlob.renderOrder = 17;
+scene.add(waterBlob);
+const _ws = new THREE.Vector3(), _wv = new THREE.Vector3();
+// anchor: where the carried water wants to float (beside the leading hand). Null when Aqua is not in use.
+function updateWater(t, dt, anchor) {
+  for (let i = sources.length - 1; i >= 0; i--) {
+    const s = sources[i];
+    const left = s.until - t;
+    if (left <= 0) { scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); sources.splice(i, 1); continue; }
+    s.mesh.scale.setScalar(Math.min((t - s.born) / 0.8, 1) * Math.min(left / 2, 1));
+    s.mesh.material.opacity = Math.min(left / 2, 1);
+    if (Math.random() < 0.35) puff('aqua', s.pos, 1, 0.5, { dir: s.normal, spread: 0.6, life: 0.45, size: 0.018 });   // it keeps bubbling up
+  }
+  if (!anchor) {                                    // not bending water: what you carried falls
+    if (water.amount > 0) { puff('aqua', water.pos, 30, 1.6, {}); water.amount = 0; }
+    waterBlob.visible = false;
+    return;
+  }
+  let near = null, nearDist = 14;
+  for (const s of sources) { const d = s.pos.distanceTo(anchor); if (d < nearDist) { nearDist = d; near = s; } }
+  if (near && water.amount < WATER_MAX) {
+    water.amount = Math.min(water.amount + dt / WATER_FILL, WATER_MAX);
+    for (let i = 0; i < 3; i++) {                   // the stream: drops leaving the source and arcing to you
+      _wv.copy(water.pos).sub(near.pos);
+      const flight = 0.55;
+      _wv.divideScalar(flight); _wv.y += 0.5 * 5 * flight;         // cancels the fall over the flight
+      _ws.copy(near.pos).add(_to.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.12));
+      particles.emit(_ws, _wv, PCOL.aqua[i % 3], 0.026, flight, 5, 0);
+    }
+  }
+  if (!water.has) water.pos.copy(anchor);
+  water.has = true;
+  water.pos.lerp(anchor, Math.min(dt * 5, 1));      // it lags and swings behind the hand like something with weight
+  waterBlob.visible = water.amount > 0.05;
+  waterBlob.position.copy(water.pos);
+  waterBlob.scale.setScalar(0.035 + 0.035 * water.amount);
+}
+
+// A whip of water: one long lash that sweeps across in front of you.
+function castWhip(key, m, c) {
+  const origin = c.hand.clone();
+  const aim = flat(c.dir, c.fwd);
+  const side = new THREE.Vector3(-aim.z, 0, aim.x);
+  const reach = m.range, half = m.arc;
+  const tilt = c.dir.clone().normalize().y;         // lash a little up or down, the way you were facing
+  const tipAt = (k, out) => {                       // k runs 0..1 across the sweep
+    const ang = (k * 2 - 1) * half;
+    return out.copy(origin).addScaledVector(aim, Math.cos(ang) * reach).addScaledVector(side, Math.sin(ang) * reach).setY(origin.y + tilt * reach * Math.cos(ang));
+  };
+  const struck = new Set();
+  const tip = new THREE.Vector3(), prevTip = tipAt(0, new THREE.Vector3()), mid = new THREE.Vector3();
+  const whip = new THREE.Mesh(new THREE.BufferGeometry(), waterMat({ flow: [0, 3, 0], scale: [8, 3, 8], amp: 0, body: 0.35 }));
+  const born = c.t, DUR = 0.3;
+  addEffect([whip], (t) => {
+    const k = Math.min((t - born) / DUR, 1);
+    tipAt(k, tip);
+    // The cord: hand, a belly that lags behind the swing, the tip.
+    mid.copy(origin).lerp(tip, 0.55).addScaledVector(side, -Math.cos(k * Math.PI) * reach * 0.22).setY((origin.y + tip.y) / 2 - 0.12);
+    whip.geometry.dispose();
+    whip.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([origin, origin.clone().lerp(mid, 0.5), mid, mid.clone().lerp(tip, 0.6), tip.clone()]), 22, 0.028 * (m.power || 1), 8, false);
+    puff(key, tip, 3, 1.4, {});
+    // Anything between the last tip position and this one, out to the reach, has been lashed.
+    for (const e of echoes) {
+      if (!isLive(e, t) || struck.has(e)) continue;
+      const p = e.group.position;
+      if (segmentDistance(p, prevTip, tip) < 0.45 || (segmentDistance(p, origin, tip) < 0.3)) {
+        if (!lineOfSight(origin, p)) continue;
+        struck.add(e);
+        hit(e, key, t, _to.copy(tip).sub(prevTip).normalize(), m);
+      }
+    }
+    for (const o of objects) {
+      if (o.dead || o.held || struck.has(o) || segmentDistance(o.pos, origin, tip) > o.def.r + 0.15) continue;
+      struck.add(o);
+      _to.copy(tip).sub(prevTip).normalize();
+      kick(o, _to.x * 5, 1.5, _to.z * 5);
+    }
+    prevTip.copy(tip);
+    whip.material.opacity = k < 1 ? 1 : Math.max(1 - (t - born - DUR) / 0.15, 0);
+    return t - born < DUR + 0.15;
+  });
+}
+
+// What a hold looks like: air wound round the thing, or water closed over it.
+function makeWrap(key) {
+  const g = new THREE.Group();
+  if (key === 'aero') {
+    // Three bands of wind at different tilts, each turning its own way.
+    for (let i = 0; i < 3; i++) {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(1, 0.2, 10, 48), energyMat('aero', { flow: [1.2, 0, 0], scale: [2.2, 9, 2.2], cut: 0.38, opacity: 0.85 }));
+      band.geometry.scale(1, 1, 0.5);
+      band.rotation.set(i * 1.05, i * 0.7, 0);
+      g.add(band);
+    }
+  } else {
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), waterMat({ flow: [0, 0.6, 0], scale: [3, 3, 3], amp: 0.1, body: 0.16 })));
+  }
+  g.renderOrder = 17;
+  scene.add(g);
+  return g;
+}
+const _orb = new THREE.Vector3(), _orbV = new THREE.Vector3();
+function updateWrap(h, at, radius, t, dt) {
+  if (!h.wrap) return;
+  h.wrap.position.copy(at);
+  if (h.key === 'aero') {
+    h.wrap.scale.setScalar(radius * 1.45);
+    h.wrap.children.forEach((band, i) => { band.rotation.z += dt * (5 + i * 1.7) * (i % 2 ? -1 : 1); band.rotation.x += dt * 0.6; });
+    for (let i = 0; i < 3; i++) {                   // streaks racing round it
+      const a = t * 11 + i * 2.094, tiltA = i * 1.05 + t * 0.6;
+      _orb.set(Math.cos(a), Math.sin(a) * Math.sin(tiltA), Math.sin(a) * Math.cos(tiltA)).multiplyScalar(radius * 1.5);
+      _orbV.set(-Math.sin(a), Math.cos(a) * Math.sin(tiltA), Math.cos(a) * Math.cos(tiltA)).multiplyScalar(2.2);
+      particles.emit(_orb.add(at), _orbV, PCOL.aero[i], 0.02, 0.22, 0, 0);
+    }
+  } else {
+    h.wrap.scale.setScalar(radius * 1.35 * (1 + 0.05 * Math.sin(t * 6)));
+    if (Math.random() < 0.5) puff('aqua', at, 1, 0.3, { jitter: radius, life: 0.4, size: 0.016 });
+  }
+}
+function dropHold(g) {
+  const h = g.hold;
+  if (h && h.wrap) { scene.remove(h.wrap); h.wrap.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); }
+  if (h && h.e) h.e.puppet = false;
+  g.hold = null;
+}
+
 // ---------- grip: holding on to something ----------
 // Aero holds objects (and can crush them with the other fist). Aqua holds echoes, the water in them.
 // Terra holds stone and steel, or tears a fresh boulder out of the floor. Pyro's version is a charged fireball.
@@ -2106,7 +2327,12 @@ function findGrabTarget(key, eye, dir, t) {
     }
   }
   if (key === 'aqua') {
-    for (const e of echoes) {
+    for (const o of objects) {                               // water closes over things as readily as wind does
+      if (o.dead || o.held) continue;
+      const a = _ga.copy(o.pos).sub(eye).angleTo(dir);
+      if (a < bestAngle && lineOfSight(eye, o.pos)) { bestAngle = a; best = { type: 'object', obj: o, pos: o.pos }; }
+    }
+    for (const e of echoes) {                                // and it finds the water inside the living, walls or not
       if (!isLive(e, t)) continue;
       const a = _ga.copy(e.group.position).sub(eye).angleTo(dir);
       if (a < bestAngle) { bestAngle = a; best = { type: 'echo', e, pos: e.group.position }; }
@@ -2134,7 +2360,8 @@ function beginHold(g, key, target, eye, t) {
   if (obj) { obj.held = true; obj.rest = false; turn(obj); }
   if (target.e) target.e.puppet = true;
   g.hold = { key, type, obj, e: target.e || null, dist: (obj ? obj.pos : target.pos).distanceTo(eye),
-    pv: new THREE.Vector3(), lastSlam: -9, lastWring: -9, reach0: 1 };
+    pv: new THREE.Vector3(), lastSlam: -9, lastWring: -9, reach0: 1,
+    wrap: key === 'aero' || key === 'aqua' ? makeWrap(key) : null };
   lastCast = key; castSound[key]();
   hudNote = GRIP[key].toLowerCase(); drawHud();
 }
@@ -2144,11 +2371,12 @@ const _want = new THREE.Vector3(), _hstep = new THREE.Vector3(), _hnext = new TH
 function updateHold(g, eye, dir, reach, input, t, dt) {
   const h = g.hold;
   if (!h) return;
-  if ((h.obj && h.obj.dead) || (h.e && h.e.down)) { if (h.e) h.e.puppet = false; g.hold = null; return; }
+  if ((h.obj && h.obj.dead) || (h.e && h.e.down)) { dropHold(g); return; }
   const dist = THREE.MathUtils.clamp(h.dist * reach * reach, 0.5, 12);    // push your arm out and it goes further away
   _want.copy(eye).addScaledVector(dir, dist);
   _want.y = Math.max(_want.y, 0.15);
   const at = h.obj ? h.obj.pos : h.e.group.position;
+  updateWrap(h, at, h.obj ? h.obj.def.r : 0.13, t, dt);
   for (let i = 0; i < 2; i++) {                             // a visible line from hand to what it holds
     _thread.copy(input.hand).lerp(at, Math.random());
     puff(h.key, _thread, 1, 0.2, { life: 0.18, size: h.key === 'aqua' ? 0.02 : 0.016, grav: 0, jitter: 0.03 });
@@ -2158,9 +2386,7 @@ function updateHold(g, eye, dir, reach, input, t, dt) {
     o.rest = false;
     o.vel.copy(_want).sub(o.pos).multiplyScalar((h.key === 'terra' ? 7 : 10) / Math.sqrt(o.def.mass)).clampLength(0, 12);   // heavy things lag behind the hand
     if (h.key === 'aero') {
-      const a = t * 9;
-      puff('aero', _thread.set(o.pos.x + Math.cos(a) * 0.3, o.pos.y + Math.sin(a * 0.7) * 0.2, o.pos.z + Math.sin(a) * 0.3), 1, 0.3, { life: 0.25 });
-      if (input.squeezeEdge) { crushObject(o, t); g.hold = null; hudNote = 'crush'; drawHud(); }
+      if (input.squeezeEdge) { crushObject(o, t); dropHold(g); hudNote = 'crush'; drawHud(); }
     }
     return;
   }
@@ -2194,7 +2420,7 @@ function updateHold(g, eye, dir, reach, input, t, dt) {
     hit(e, 'aqua', t, ZERO, { damage: 1 });
     hudNote = 'wring'; drawHud();
   }
-  if (e.down) g.hold = null;
+  if (e.down) dropHold(g);
 }
 function endHold(g) {
   const h = g.hold;
@@ -2219,8 +2445,7 @@ function endHold(g) {
     }
   }
   else if (h.e && !h.e.down) { h.e.vel.x = h.pv.x * 0.6; h.e.vel.z = h.pv.z * 0.6; }
-  if (h.e) h.e.puppet = false;
-  g.hold = null;
+  dropHold(g);
 }
 
 // Rings that show what a hand would take hold of.
@@ -2481,6 +2706,8 @@ function drawHud() {
 }
 
 // ---------- hands ----------
+const waterAnchor = new THREE.Vector3();
+let waterAnchorOn = false;
 function newHand() {
   return {
     valid: false, seen: false, armed: false, ready: true, clapBlock: -1,
@@ -2647,7 +2874,11 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
           firePulse(hitPalm.point);
           hudNote = ELEMENTS.terra.sense.toLowerCase(); lastCast = 'terra'; drawHud();
         } else {
-          hudNote = `${ELEMENTS[selected].label.toLowerCase()} senses differently`; drawHud();
+          if (selected === 'aqua') {
+            const surf = nearestRoomSurface(st.palm, 0.4);
+            addSource(hitPalm.point, surf ? surf.normal : UP, t);
+            hudNote = 'wellspring'; lastCast = 'aqua'; drawHud();
+          } else { hudNote = `${ELEMENTS[selected].label.toLowerCase()} senses differently`; drawHud(); }
         }
       }
     }
@@ -2718,6 +2949,11 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
       }
     }
   }
+
+  // Carried water floats just above and outside whichever hand is free to lead.
+  const lead = R.valid && R !== menuHand ? R : L.valid && L !== menuHand ? L : null;
+  if (selected === 'aqua' && lead) waterAnchor.copy(lead.palm).addScaledVector(lead.normal, -0.06).add(_off.set(0, 0.16, 0));
+  waterAnchorOn = selected === 'aqua' && !!lead;
 
   // HUD rides the left wrist; it steps aside while the menu is up.
   hud.visible = !menuHand;
@@ -2797,7 +3033,7 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   if (previewGesture === 'sense') {
     if (selected === 'terra') { if (hit) firePulse(hit.point); }
     else if (selected === 'aero') senseAero(hand, t);
-    else if (selected === 'aqua') previewHold = { kind: 'aqua', until: t + 2.2, origin: hand, dir };
+    else if (selected === 'aqua') { previewHold = { kind: 'aqua', until: t + 2.2, origin: hand, dir }; if (hit) addSource(hit.point, hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP, t); }
     else previewHold = { kind: 'pyro', until: t + 2.2, origin: eye };
     if (selected !== 'aero') { hudNote = ELEMENTS[selected].sense.toLowerCase(); drawHud(); }
     return;
@@ -2976,6 +3212,11 @@ renderer.setAnimationLoop((ms, frame) => {
     }
   }
 
+  if (!renderer.xr.isPresenting) {
+    waterAnchorOn = selected === 'aqua';
+    waterAnchor.copy(camera.position).add(_off.set(0.3, -0.18, -0.45).applyQuaternion(camera.quaternion));
+  }
+  updateWater(t, dt, waterAnchorOn ? waterAnchor : null);
   updateHeldSenses(t);
   updateObjects(t, dt);
   updateEchoes(t, dt, viewerPos);
@@ -2992,7 +3233,7 @@ window.__tremor = {
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
-  barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit,
+  barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit, sources, addSource, water,
   get hp() { return playerHP; }, attackSoon() { nextAttackAt = 0; },
   setHold(h) { previewHold = h; },
   get down() { return downCount; },

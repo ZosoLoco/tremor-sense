@@ -92,3 +92,46 @@ On a phone or desktop the page runs a preview room: pick a discipline and a move
 No build step. `index.html`, `main.js` and a vendored copy of three.js. Serve over HTTPS (GitHub Pages works) because WebXR requires it.
 
 Tuning lives at the top of `main.js`: gesture speeds and distances, sense ranges, and the `MOVES` table that defines every attack. Colours and flow of each element live in `ENERGY`.
+
+
+## Build 4 to 6: sub-elements, charged throws, shaping
+
+### Sub-elements
+Pick the discipline you are already in (poke its orb again, or tap its chip) to step to its next form.
+
+| Discipline | Forms | What changes |
+|---|---|---|
+| Terra | rock, sand, metal, lava | as before |
+| Pyro | flame, lightning, blast | lightning arcs to a second creature and conducts, no burn. Blast makes every hit a small explosion, no burn. |
+| Aqua | water, ice, steam | ice freezes; Breaker stands as an ice wall, Geyser as an ice spike. Steam blinds and leaves scalding cloud, no soak. |
+| Aero | wind, vacuum, sound | vacuum pulls toward you and drains (a second hit lands by itself). Sound passes through walls and stuns, no shove. |
+
+### Charged throws
+Hold a raised fist closed, then punch to let it go. Pyro charges at any reach; the others charge with the fist drawn in
+close to you (a fist reached out is a grab).
+
+| Pyro | Aqua | Terra | Aero |
+|---|---|---|---|
+| Fireball | Deluge: spends all carried water, splashes, leaves a source. While charging, water streams in faster and past the usual three measures; with no source it condenses slowly from the air. | Meteor: arcs, lands as a quake, leaves a stone | Air Cannon: a fast ball of wind that goes through everything in line |
+
+### Shaping: the pinch
+Thumb and index together, other fingers out.
+
+- **Aqua, Stream.** The water you carry runs out into a rope hanging from your fingers. Swing it to lash. Close the
+  fist and the tip takes hold of what you are reaching at: a creature is dragged with your hand and cannot attack,
+  an object swings like a weight on a line. The other fist constricts or crushes. Open the hand to let go and fling.
+  Pinch the stream with your other hand and it stretches into a curtain that swallows shards (and turns them into
+  water). Let go with that second hand while your hands are more than half a metre apart and it stays as a wall.
+  Hit your own water wall and it rolls out as a wave. In ice form the stream is a blade, the curtain reflects, the
+  wall is ice and breaks into shards. In steam form it scalds and the wall is a bank of cloud.
+- **Aero, Current.** Pinch and drag a line through the air. Wind keeps blowing along it for 12 seconds: it carries
+  objects and clouds, pushes creatures, and takes over shards. Push an open hand through it to bend it. Vacuum form
+  runs it backwards and drains. Sound form holds creatures stunned instead of moving them. Three at a time.
+- **Pyro, Fire Line.** Pinch and drag: a line of fire that burns for 7 seconds, hurts what crosses, eats shards.
+  Lightning form goes off once along the whole line. Blast form is a fuse.
+- **Terra, Ridge.** Pinch and drag: low cover rises from the floor under the line, in the current earth form.
+
+### Also
+Creature kinds (ember, wisp, pebble, drip) and waves; palm menu second row: CALM (no attacks), READ (shows what the
+hand tracker thinks you did), NEW (new game); particle detail adapts to frame rate.
+In the browser preview: `charge` and `draw` chips (press, hold or drag, release).

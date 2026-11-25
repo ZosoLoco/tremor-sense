@@ -108,7 +108,7 @@ const forms = { pyro: 'flame', aqua: 'water', aero: 'wind' };
 const formOf = (key) => key === 'terra' ? terraForm : forms[key];
 // Which set of colours a move is drawn in.
 const lookOf = (key, m) => m && m.form === 'lightning' ? 'volt' : key;
-const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip', 'charge'];
+const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip', 'charge', 'draw'];
 
 // What each verb does per discipline. kind picks the behaviour, the rest are its numbers.
 const MOVES = {
@@ -119,7 +119,7 @@ const MOVES = {
     sweep: { name: 'Fire Arc',    kind: 'bolt',   speed: 6,  radius: 0.5, shape: 'crescent', size: 0.5, pierce: true, life: 1.2 },
     slam:  { name: 'Eruption',    kind: 'ring',   maxR: 3.6, height: 1.4 },
     point: { name: 'Volt',        kind: 'beam',   range: 14, chain: 3, volt: true },
-    grip:  { name: 'Fireball',    kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
+    grip:  { name: 'Fireball (hold)', kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
     charge: { name: 'Fireball',   kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
   },
   aqua: {
@@ -671,7 +671,7 @@ function openSpot(box, yMin, yMax, radius, eye, others = [], gap = 0) {
 // Clear a wave and the next begins with the room as you left it. Go down and it is back to wave one, room reset.
 let wave = 1, activeCount = 3;
 function scatterEchoes(keepWorld = false) {
-  if (!keepWorld) clearBarriers();
+  if (!keepWorld) { clearBarriers(); clearShaping(); }
   const box = roomBounds();
   const eye = spawnEye(), taken = [];
   activeCount = Math.min(2 + wave, ECHO_COUNT);
@@ -2649,7 +2649,7 @@ function updateWater(t, dt, anchor, boost = false) {
   if (!water.has) water.pos.copy(anchor);
   water.has = true;
   water.pos.lerp(anchor, Math.min(dt * 5, 1));      // it lags and swings behind the hand like something with weight
-  waterBlob.visible = water.amount > 0.05;
+  waterBlob.visible = water.amount > 0.05 && !stream.on;        // drawn out into a stream, it is not a ball any more
   waterBlob.position.copy(water.pos);
   waterBlob.scale.setScalar(0.028 + 0.022 * Math.min(water.amount, 3) + 0.012 * Math.max(water.amount - 3, 0));
 }
@@ -2954,6 +2954,520 @@ function throwCharged(key, hand, dir, eye, fwd, charge, t) {
 }
 const throwFireball = (hand, dir, eye, fwd, charge, t) => throwCharged('pyro', hand, dir, eye, fwd, charge, t);
 
+// ---------- shaping: pinch ----------
+// A pinch (thumb and index together, the other fingers out) is the hands-on verb. What it does depends on the discipline.
+//   Aqua  draws the water you carry out into a stream that hangs from your fingers and moves like a rope.
+//         Swing it and it lashes. Close the fist and the tip takes hold of what you are reaching at. Pinch it with the
+//         other hand and it stretches into a curtain between your hands; let go of that hand and it stays as a wall.
+//   Aero  traces a current through the air that keeps blowing along the line you drew.
+//   Pyro  traces a line of fire.     Terra  traces a ridge that comes up out of the floor under the line.
+const PINCH_ON = 0.022, PINCH_OFF = 0.05;
+const _np = new THREE.Vector3(), _nt = new THREE.Vector3();
+function nearestOnPath(p, pts, out) {
+  out.dist = Infinity;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    _nt.subVectors(pts[i + 1], a);
+    const l2 = _nt.lengthSq();
+    const k = l2 ? Math.min(Math.max(_np.subVectors(p, a).dot(_nt) / l2, 0), 1) : 0;
+    _np.copy(a).addScaledVector(_nt, k);
+    const d = _np.distanceTo(p);
+    if (d < out.dist) { out.dist = d; out.i = i; out.point.copy(_np); out.tan.copy(_nt).normalize(); }
+  }
+  return out;
+}
+const _near = { dist: 0, i: 0, point: new THREE.Vector3(), tan: new THREE.Vector3() };
+
+// --- Aqua: the stream ---
+const STREAM_N = 16, LASH_SPEED = 3.5;
+const streamMats = {
+  water: waterMat({ flow: [0, 3, 0], scale: [8, 3, 8], amp: 0, body: 0.3 }),
+  ice: iceMat(),
+  steam: waterMat({ flow: [0, 2, 0], scale: [5, 5, 5], amp: 0, body: 0.05 }),
+};
+const stream = {
+  on: false, len: 1, latch: null, twoHand: false, span: 0, lastGrip: false, lastSqueeze: false, struck: new Map(),
+  seenT: -9, lastCtl: null, owner: null, endOwner: null,
+  nodes: Array.from({ length: STREAM_N }, () => ({ p: new THREE.Vector3(), prev: new THREE.Vector3(), last: new THREE.Vector3() })),
+  mesh: new THREE.Mesh(new THREE.BufferGeometry(), streamMats.water),
+  sheet: new THREE.Mesh(new THREE.BufferGeometry(), waterMat({ flow: [0, -1.4, 0], scale: [6, 3, 6], amp: 0, body: 0.12 })),
+};
+stream.sheet.material.side = THREE.DoubleSide;
+for (const m of [stream.mesh, stream.sheet]) { m.visible = false; m.frustumCulled = false; m.renderOrder = 15; scene.add(m); }
+// What drives the stream this frame: { root, dir, vel, eye, grip, squeeze, end }. Hands fill it in; so does the preview.
+let streamCtl = null;
+const streamLength = () => Math.min(0.5 + 0.45 * water.amount, 2.6);
+function startStream(ctl, t) {
+  if (stream.on) return true;
+  if (water.amount < 0.5) { hudNote = 'no water to draw out'; lastCast = 'aqua'; drawHud(); return false; }
+  stream.on = true; stream.latch = null; stream.twoHand = false; stream.lastGrip = !!ctl.grip; stream.lastSqueeze = false;
+  stream.struck.clear(); stream.seenT = t; stream.lastCtl = ctl;
+  const from = water.has ? water.pos : ctl.root;
+  // It starts bunched at the fingers and runs out to its length over the next half second.
+  _sd.subVectors(from, ctl.root);
+  if (_sd.lengthSq() < 1e-4) _sd.set(0, -1, 0);
+  _sd.normalize();
+  stream.nodes.forEach((n, i) => {
+    n.p.copy(ctl.root).addScaledVector(_sd, i * 0.02).add(_sv.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.01));
+    n.prev.copy(n.p); n.last.copy(n.p);
+  });
+  stream.born = t;
+  tick(); hudNote = 'stream'; lastCast = 'aqua'; drawHud();
+  return true;
+}
+function endStream(t, ctl) {
+  if (!stream.on) return;
+  if (stream.latch && ctl) flingLatched(ctl);
+  stream.on = false; stream.latch = null; stream.twoHand = false; stream.owner = stream.endOwner = null;
+  stream.mesh.visible = stream.sheet.visible = false;
+  water.pos.copy(stream.nodes[0].p);
+}
+const latchPos = () => stream.latch.e ? stream.latch.e.group.position : stream.latch.o.pos;
+function flingLatched(ctl) {
+  const l = stream.latch;
+  if (l.o) { l.o.vel.addScaledVector(ctl.vel, 1.2); l.o.rest = false; }
+  else if (ctl.vel.length() > 1.2) {
+    l.e.vel.x += ctl.vel.x * 2; l.e.vel.z += ctl.vel.z * 2;
+    if (ctl.vel.y > 1 && !l.e.airborne) { l.e.airborne = true; l.e.vel.y = 2.2; }
+  }
+  stream.latch = null;
+  hudNote = 'let go'; drawHud();
+}
+const _sv = new THREE.Vector3(), _sd = new THREE.Vector3(), _sline = new THREE.Vector3(), _sa2 = new THREE.Vector3();
+function updateStream(t, dt) {
+  if (!stream.on) return;
+  let ctl = streamCtl;
+  if (ctl) { stream.seenT = t; stream.lastCtl = ctl; }
+  else if (t - stream.seenT < 0.3) ctl = stream.lastCtl;           // a dropped frame of tracking does not spill it
+  if (!ctl || selected !== 'aqua' || water.amount < 0.3) { endStream(t, ctl); return; }
+  const form = forms.aqua, N = STREAM_N, nodes = stream.nodes, root = ctl.root;
+  const base = streamLength() * Math.min(0.15 + (t - stream.born) / 0.5, 1);
+  if (stream.latch && (stream.latch.e ? stream.latch.e.down : (stream.latch.o.dead || stream.latch.o.held))) stream.latch = null;
+
+  // The far end: free, in the other hand, or wrapped round something.
+  const wasTwo = stream.twoHand;
+  stream.twoHand = !!ctl.end && !stream.latch;
+  if (wasTwo && !stream.twoHand && !stream.latch && stream.span > 0.5) { plantWall(nodes[0].p.clone(), nodes[N - 1].p.clone(), t); endStream(t, null); return; }
+  const tipTarget = stream.latch ? latchPos() : stream.twoHand ? ctl.end : null;
+  let len = base;
+  if (tipTarget) len = Math.min(Math.max(root.distanceTo(tipTarget) * 1.03, 0.2), streamLength() * 2.2);
+  if (form === 'ice' && !tipTarget) len = Math.min(len, 1.3);
+  stream.len = len; stream.span = stream.twoHand ? root.distanceTo(ctl.end) : 0;
+  const seg = len / (N - 1);
+
+  // Verlet rope: every node keeps its momentum, then the links pull it back into line.
+  // Stepped at a fixed small interval so it swings the same at any frame rate.
+  const grav = form === 'ice' ? 0 : form === 'steam' ? -0.8 : 6;
+  const subs = Math.min(Math.max(Math.ceil(dt / 0.012), 1), 6), step = Math.min(dt, 0.08) / subs;
+  for (const n of nodes) n.last.copy(n.p);
+  const rootFrom = _sline.copy(nodes[0].p);
+  for (let sub = 1; sub <= subs; sub++) {
+    for (let i = 1; i < N; i++) {
+      const n = nodes[i];
+      _sv.subVectors(n.p, n.prev).multiplyScalar(0.985).clampLength(0, 0.25);   // capped, so a hand that jumps cannot fling it across the room
+      n.prev.copy(n.p);
+      n.p.add(_sv); n.p.y -= grav * step * step;
+    }
+    for (let it = 0; it < 6; it++) {
+      nodes[0].p.copy(rootFrom).lerp(root, sub / subs);
+      if (tipTarget) nodes[N - 1].p.copy(tipTarget);
+      for (let i = 0; i < N - 1; i++) {
+        const a = nodes[i].p, b = nodes[i + 1].p;
+        _sd.subVectors(b, a);
+        const dist = _sd.length() || 1e-5, diff = (dist - seg) / dist;
+        if (i === 0) b.addScaledVector(_sd, -diff);
+        else if (i === N - 2 && tipTarget) a.addScaledVector(_sd, diff);
+        else { a.addScaledVector(_sd, diff * 0.5); b.addScaledVector(_sd, -diff * 0.5); }
+      }
+    }
+  }
+  if (!tipTarget) for (let i = 1; i < N; i++) {      // whatever else happens, no link is ever stretched far
+    _sd.subVectors(nodes[i].p, nodes[i - 1].p);
+    if (_sd.length() > seg * 1.4) nodes[i].p.copy(nodes[i - 1].p).addScaledVector(_sd.setLength(seg * 1.4), 1);
+  }
+  if (form === 'ice' && !tipTarget) for (let i = 1; i < N; i++) nodes[i].p.lerp(_sa2.copy(root).addScaledVector(ctl.dir, seg * i), 0.6);   // frozen: a blade
+  for (let i = 1; i < N; i++) if (nodes[i].p.y < 0.03) nodes[i].p.y = 0.03;
+
+  // Lash: the outer part of the stream, moving fast, hits what it crosses.
+  const m = { name: 'Stream', kind: 'whip', damage: (water.amount >= 2 ? 2 : 1) + (form === 'ice' ? 1 : 0), freeze: form === 'ice', steam: form === 'steam', form: form === 'water' ? undefined : form };
+  const lash = form === 'water' ? LASH_SPEED : 2;
+  if (!stream.twoHand) for (let i = Math.floor(N / 3); i < N; i++) {
+    const n = nodes[i];
+    const speed = _sv.subVectors(n.p, n.last).length() / Math.max(dt, 1e-3);
+    if (speed < lash) continue;
+    _sv.normalize();
+    for (const e of echoes) {
+      if (!isLive(e, t) || (stream.latch && stream.latch.e === e) || t - (stream.struck.get(e) || -9) < 0.6) continue;
+      if (segmentDistance(e.group.position, n.last, n.p) > 0.32 && segmentDistance(e.group.position, nodes[i - 1].p, n.p) > 0.3) continue;   // swept, so a fast tip cannot skip past
+      stream.struck.set(e, t);
+      puff('aqua', n.p, 16, 2.2, {});
+      hit(e, 'aqua', t, _sv, m);
+    }
+    for (const o of objects) {
+      if (o.dead || o.held || o.def.cloud || (stream.latch && stream.latch.o === o) || t - (stream.struck.get(o) || -9) < 0.4) continue;
+      if (segmentDistance(o.pos, nodes[i - 1].p, n.p) > o.def.r + 0.12) continue;
+      stream.struck.set(o, t);
+      kick(o, _sv.x * 4, 1.2, _sv.z * 4);
+    }
+  }
+
+  // Take hold: the fist closes and the tip goes to what you are reaching at.
+  if (ctl.grip && !stream.lastGrip && !stream.latch && !stream.twoHand) {
+    let best = null, bestScore = 0.45;
+    const reach = streamLength() * 1.6 + 0.4, tip = nodes[N - 1].p;
+    const consider = (pos, ref) => {
+      if (pos.distanceTo(root) > reach) return;
+      const score = Math.min(_sv.subVectors(pos, ctl.eye).angleTo(ctl.dir), pos.distanceTo(tip) * 0.6);
+      if (score < bestScore) { bestScore = score; best = ref; }
+    };
+    for (const e of echoes) if (isLive(e, t)) consider(e.group.position, { e });
+    for (const o of objects) if (!o.dead && !o.held && !o.def.cloud) consider(o.pos, { o });
+    if (best) {
+      stream.latch = best;
+      stream.tether = Math.max(latchPos().distanceTo(root) * 0.9, 0.4);     // it goes taut at the distance you caught it
+      tick(); hudNote = 'took hold'; lastCast = 'aqua'; drawHud();
+      puff('aqua', latchPos(), 24, 1.8, {});
+      if (best.e) {
+        if (form === 'ice') { best.e.frozenUntil = t + 6; best.e.vel.set(0, best.e.vel.y, 0); }
+        else if (form === 'steam') best.e.blindUntil = t + 2;
+        else best.e.soakedUntil = t + 6;
+      } else turn(best.o);
+    }
+  } else if (!ctl.grip && stream.lastGrip && stream.latch) flingLatched(ctl);
+  stream.lastGrip = !!ctl.grip;
+
+  if (stream.latch) {
+    const tp = latchPos();
+    _sd.subVectors(root, tp);
+    const dist = _sd.length() || 1e-5;
+    _sd.divideScalar(dist);
+    const over = Math.max(dist - stream.tether, 0);
+    if (stream.latch.e) {                          // a creature: dragged where your hand goes, and it cannot fight back
+      const e = stream.latch.e;
+      e.vel.x += (_sd.x * over * 14 + ctl.vel.x * 3.5) * dt; e.vel.z += (_sd.z * over * 14 + ctl.vel.z * 3.5) * dt;
+      if (ctl.vel.y > 1.6 && !e.airborne && !(e.frozenUntil > t)) { e.airborne = true; e.vel.y = 2.2; }
+      e.blindUntil = Math.max(e.blindUntil, t + 0.3);
+      e.revealedUntil = Math.max(e.revealedUntil, t + 1);
+      if (ctl.squeeze && !stream.lastSqueeze) { hudNote = 'constrict'; hit(e, 'aqua', t, ZERO, { damage: 1, kind: 'grip', freeze: form === 'ice' }); }
+    } else {                                       // an object: a weight on the end of a rope
+      const o = stream.latch.o;
+      o.vel.addScaledVector(_sd, over * 60 * dt);
+      o.vel.multiplyScalar(Math.max(1 - 1.2 * dt, 0));
+      o.rest = false;
+      if (ctl.squeeze && !stream.lastSqueeze) { crushObject(o, t); stream.latch = null; hudNote = 'crush'; drawHud(); }
+    }
+  }
+  stream.lastSqueeze = !!ctl.squeeze;
+
+  // Between two hands it spreads into a curtain that takes what is thrown at you.
+  const curtain = stream.twoHand && stream.span > 0.3;
+  stream.sheet.visible = curtain;
+  if (curtain) {
+    const pos = [], idx = [];
+    nodes.forEach((n, i) => {
+      const drop = Math.min(0.6, n.p.y - 0.03);
+      pos.push(n.p.x, n.p.y, n.p.z, n.p.x, n.p.y - drop, n.p.z);
+      if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+    });
+    const g = stream.sheet.geometry;
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    stream.sheet.material = form === 'ice' ? streamMats.ice : stream.sheetWater || (stream.sheetWater = stream.sheet.material);
+    for (const o of objects) {
+      if (o.dead || !o.hostile) continue;
+      let hitNode = null;
+      for (const n of nodes) if (Math.hypot(n.p.x - o.pos.x, n.p.z - o.pos.z) < 0.3 && o.pos.y < n.p.y + 0.15 && o.pos.y > n.p.y - 0.7) { hitNode = n; break; }
+      if (!hitNode) continue;
+      if (form === 'ice') { turn(o); sendBack(o, 9); tick(); hudNote = 'turned on the ice'; }
+      else { o.dead = true; puff('aqua', o.pos, 26, 2.2, {}); water.amount = Math.min(water.amount + 0.5, WATER_MAX * 2); tick(); hudNote = 'swallowed'; }
+      lastCast = 'aqua'; drawHud();
+    }
+  }
+
+  // Draw it.
+  const mesh = stream.mesh;
+  mesh.visible = true;
+  mesh.material = streamMats[form];
+  mesh.geometry.dispose();
+  const radius = form === 'ice' ? 0.02 : 0.012 + 0.006 * Math.min(water.amount, 4);
+  mesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(nodes.map(n => n.p)), 34, radius, 7, false);
+  if (form === 'steam') { if (Math.random() < 0.6) fume(STEAM, nodes[Math.floor(Math.random() * N)].p, 1, { size: 0.14, life: 0.7, rise: 0.3 }); }
+  else if (form === 'water' && Math.random() < 0.3) particles.emit(nodes[1 + Math.floor(Math.random() * (N - 1))].p, _sv.set(0, -0.2, 0), PCOL.aqua[1], 0.014, 0.5, 5, 0);
+}
+// The curtain left standing where you held it.
+function plantWall(a, b, t) {
+  const form = forms.aqua;
+  water.amount = Math.max(water.amount - 1, 0);
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  const under = collide(mid, mid.clone().setY(-0.3));
+  const baseY = under ? under.point.y : 0;
+  const along = new THREE.Vector3(b.x - a.x, 0, b.z - a.z);
+  const width = Math.max(along.length(), 0.6);
+  along.normalize();
+  const height = Math.min(Math.max(Math.max(a.y, b.y) - baseY, 0.7), 1.8);
+  tick(); lastCast = 'aqua';
+  if (form === 'steam') {                          // steam will not stand: it hangs there as a bank of cloud
+    for (let i = 0; i < 3; i++) spawnCloud('steam', a.clone().lerp(b, i / 2).setY(baseY + 0.7), t, 7);
+    hudNote = 'steam bank'; drawHud();
+    return null;
+  }
+  const wall = new THREE.Group();
+  wall.position.set(mid.x, baseY, mid.z);
+  wall.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), along);
+  if (form === 'ice') {
+    const slab = craggy(new THREE.BoxGeometry(width, height, 0.14, 8, 6, 1).translate(0, height / 2, 0), 0.04);
+    slab.computeVertexNormals();
+    wall.add(new THREE.Mesh(slab, iceMat()));
+  } else {
+    const sheet = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.1, 10, 8, 1).translate(0, height / 2, 0), waterMat({ flow: [0, -1.4, 0], scale: [6, 3, 6], amp: 0.02, body: 0.16 }));
+    wall.add(sheet);
+  }
+  wall.scale.set(1, 0.01, 1);
+  const centre = () => wall.position.clone().setY(baseY + height * 0.5);
+  let alive = true;
+  const fall = (tt, quiet) => {
+    if (!alive) return;
+    alive = false;
+    removeBarrier(barrier);
+    puff('aqua', centre(), 50, 2.6, { jitter: width * 0.5 });
+    if (!quiet && form !== 'ice') addSource(wall.position.clone(), UP, tt, 20);     // it falls, and the floor stays wet
+  };
+  const barrier = addBarrier(new THREE.BoxGeometry(width, height, 0.2).translate(0, height / 2, 0), wall, {
+    // Hit it with one of your own moves and it goes: water rolls out as a wave, ice breaks into shards.
+    struck: (dv, k, tt) => {
+      const c = centre(), d = flat(dv, along);
+      fall(tt, true);
+      if (form === 'ice') for (let i = 0; i < 3; i++) { const o = spawnObject('ice', c.clone().addScaledVector(along, (i - 1) * width * 0.3)); if (o) kick(o, d.x * 9, 2, d.z * 9); }
+      else cast('aqua', 'shove', { hand: c, dir: d.clone(), eye: c.clone().addScaledVector(d, -1), fwd: d.clone(), t: tt });
+    },
+    crumble: (tt) => fall(tt),
+    reflect: form === 'ice',
+    damage: (tt) => { puff('aqua', centre(), 14, 2, { jitter: width * 0.4 }); if (--barrier.hp <= 0) fall(tt); },
+  });
+  barrier.hp = form === 'ice' ? 4 : 2;
+  const until = t + (form === 'ice' ? 20 : 12);
+  addEffect([wall], (n) => {
+    wall.scale.y = Math.min((n - t) / 0.2, 1);
+    if (alive && n > until) fall(n);
+    return alive;
+  });
+  hudNote = form === 'ice' ? 'ice wall' : 'water wall'; drawHud();
+  return barrier;
+}
+
+// --- drawn lines ---
+const DRAW_STEP = 0.12, DRAW_MAX = 28;
+const DRAWN = { terra: 'Ridge', pyro: 'Fire Line', aqua: 'Stream', aero: 'Current' };   // what a pinch makes
+let drawing = null;                                 // { key, pts, owner }
+function drawBegin(key, p, owner = null) { drawing = { key, pts: [p.clone()], owner }; noteGesture('pinch'); }
+function drawAdd(p) {
+  if (!drawing) return;
+  const last = drawing.pts[drawing.pts.length - 1];
+  if (p.distanceTo(last) < DRAW_STEP || drawing.pts.length >= DRAW_MAX) return;
+  drawing.pts.push(p.clone());
+  puff(drawing.key, p, 3, 0.4, {});
+}
+function drawEnd(t) {
+  const d = drawing;
+  drawing = null;
+  if (!d || d.pts.length < 3) return null;
+  tick(); lastCast = d.key;
+  const made = d.key === 'aero' ? makeCurrent(d.pts, t) : d.key === 'pyro' ? fireLine(d.pts, t) : d.key === 'terra' ? raiseRidge(d.pts, t) : null;
+  drawHud();
+  return made;
+}
+
+// --- Aero: currents ---
+const currents = [];
+const CURRENT_LIFE = 12, CURRENT_R = 0.5, CURRENT_SPEED = 6;
+function endCurrent(c) {
+  const i = currents.indexOf(c);
+  if (i < 0) return;
+  currents.splice(i, 1);
+  scene.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh.material.dispose();
+}
+function clearShaping() {
+  while (currents.length) endCurrent(currents[0]);
+  endStream(now(), null);
+  drawing = null; streamCtl = null;
+}
+function makeCurrent(pts, t) {
+  if (currents.length >= 3) endCurrent(currents[0]);
+  const form = forms.aero;
+  const c = {
+    pts: pts.map(p => p.clone()), born: t, until: t + CURRENT_LIFE, form, dir: form === 'vacuum' ? -1 : 1, builtAt: -9,
+    mesh: new THREE.Mesh(new THREE.BufferGeometry(), energyMat('aero', { flow: [1.2, 0.4, 1.2], scale: [4, 4, 4], cut: 0.5, opacity: 0.55 })),
+  };
+  c.mesh.frustumCulled = false; c.mesh.renderOrder = 14;
+  scene.add(c.mesh);
+  currents.push(c);
+  thump();
+  hudNote = form === 'vacuum' ? 'undertow' : form === 'sound' ? 'drone' : 'current';
+  return c;
+}
+const _cv = new THREE.Vector3(), _cp = new THREE.Vector3();
+function updateCurrents(t, dt, eye) {
+  for (let ci = currents.length - 1; ci >= 0; ci--) {
+    const c = currents[ci];
+    if (t > c.until) { endCurrent(c); continue; }
+    if (t - c.builtAt > 0.12) {                     // the ribbon turns to keep facing you
+      c.builtAt = t;
+      c.mesh.geometry.dispose();
+      c.mesh.geometry = ribbonGeo(c.pts, 0.3, eye);
+    }
+    c.mesh.material.opacity = Math.min((t - c.born) / 0.3, 1, (c.until - t) / 1.5) * 0.55;
+    for (let k = 0; k < 3; k++) {                   // streaks running along it show which way it blows
+      const i = Math.floor(Math.random() * (c.pts.length - 1));
+      _cp.copy(c.pts[i]).lerp(c.pts[i + 1], Math.random()).add(_cv.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.3));
+      _cv.subVectors(c.pts[i + 1], c.pts[i]).normalize().multiplyScalar(CURRENT_SPEED * 0.8 * c.dir);
+      particles.emit(_cp, _cv, PCOL.aero[k % 3], 0.02, 0.3, 0, 0);
+    }
+    for (const o of objects) {
+      if (o.dead || o.held) continue;
+      nearestOnPath(o.pos, c.pts, _near);
+      if (_near.dist > CURRENT_R + o.def.r) continue;
+      if (c.form === 'sound') continue;             // a drone moves nothing
+      turn(o);                                      // what they threw is yours once the wind has it
+      const speed = o.def.cloud ? 2.5 : CURRENT_SPEED / Math.sqrt(o.def.mass);
+      o.vel.lerp(_cv.copy(_near.tan).multiplyScalar(speed * c.dir).addScaledVector(_cp.copy(_near.point).sub(o.pos), 3), Math.min(dt * 6, 1));
+      o.vel.y += 9.8 * dt;                          // carried: the wind holds its weight
+      o.rest = false;
+    }
+    for (const e of echoes) {
+      if (e.down) continue;
+      nearestOnPath(e.group.position, c.pts, _near);
+      if (_near.dist > CURRENT_R + 0.2) continue;
+      reveal(e, t, 1, ELEMENTS.aero.color);         // you can see what the wind is pushing against
+      if (c.form === 'sound') { e.blindUntil = Math.max(e.blindUntil, t + 1); continue; }
+      if (e.frozenUntil > t) continue;
+      e.vel.x += _near.tan.x * c.dir * 14 * dt; e.vel.z += _near.tan.z * c.dir * 14 * dt;
+      if (_near.tan.y * c.dir > 0.5 && !e.airborne) { e.airborne = true; e.vel.y = 2.2; }
+      if (c.form === 'vacuum' && !(e.drainAt > 0)) e.drainAt = t + 1.5;
+    }
+  }
+}
+// An open hand moving through a current drags it along.
+function bendCurrents(handPos, handVel, dt) {
+  let bent = false;
+  for (const c of currents) for (const pt of c.pts) {
+    const d = pt.distanceTo(handPos);
+    if (d < 0.4) { pt.addScaledVector(handVel, dt * (1 - d / 0.4)); c.builtAt = -9; bent = true; }
+  }
+  return bent;
+}
+
+// --- Pyro: a line of fire ---
+function fireLine(pts, t) {
+  const form = forms.pyro;
+  pts = pts.map(p => p.clone());
+  if (form === 'lightning') {                       // it does not burn: it goes off once, along the whole line
+    for (let i = 0; i < pts.length - 1; i++) zap(pts[i], pts[i + 1], t);
+    thump();
+    for (const e of echoes) if (!e.down && nearestOnPath(e.group.position, pts, _near).dist < 0.5) hit(e, 'pyro', t, UP, { damage: 2, volt: true, arc: true });
+    for (const o of objects) if (!o.dead && o.hostile && nearestOnPath(o.pos, pts, _near).dist < 0.5) { o.dead = true; puff('volt', o.pos, 14, 2, {}); }
+    hudNote = 'live wire';
+    return { form };
+  }
+  if (form === 'blast') {                           // a fuse: it goes off point by point
+    let next = 0;
+    addEffect([], (n) => {
+      while (next < pts.length && n - t > next * 0.07) { explode(pts[next], 'pyro', 0.6, n, 1, true); next += 2; }
+      return next < pts.length;
+    });
+    hudNote = 'fuse';
+    return { form };
+  }
+  const until = t + 7, last = new Map();
+  addEffect([], (n) => {
+    for (let k = 0; k < thinned(5); k++) {
+      const i = Math.floor(Math.random() * (pts.length - 1));
+      puff('pyro', _cp.copy(pts[i]).lerp(pts[i + 1], Math.random()), 1, 0.7, { up: 1.6 });
+    }
+    lightNow(pts[pts.length >> 1], FIRE_LIGHT, 0.9);
+    for (const e of echoes) {
+      if (e.down || n - (last.get(e) || -9) < 1 || nearestOnPath(e.group.position, pts, _near).dist > 0.4) continue;
+      last.set(e, n);
+      hit(e, 'pyro', n, UP, { damage: 1 });
+    }
+    for (const o of objects) {
+      if (o.dead || o.held || nearestOnPath(o.pos, pts, _near).dist > 0.35 + o.def.r) continue;
+      if (o.hostile) { o.dead = true; puff('pyro', o.pos, 16, 2, {}); tick(); }   // what they throw burns up in it
+      else ignite(o, n);
+    }
+    return n < until;
+  });
+  hudNote = 'fire line';
+  return { form, until };
+}
+
+// --- Terra: a ridge ---
+function raiseRidge(pts, t) {
+  const form = terraForm;
+  // Drop the line onto whatever is under it.
+  const ground = [];
+  for (const p of pts) {
+    const under = collide(p, p.clone().setY(-0.3));
+    const q = new THREE.Vector3(p.x, under ? under.point.y : 0, p.z);
+    if (!ground.length || Math.hypot(q.x - ground[ground.length - 1].x, q.z - ground[ground.length - 1].z) > 0.4) ground.push(q);
+  }
+  if (ground.length < 2) { hudNote = 'draw it along the ground'; return null; }
+  if (form === 'sand') {
+    ground.forEach((q, i) => { if (i % 2 === 0) spawnCloud('sand', q.clone().setY(q.y + 0.5), t, 6); });
+    hudNote = 'sand screen';
+    return { form };
+  }
+  const height = 0.75, parts = [], groups = [];
+  const mid = new THREE.Vector3();
+  for (let i = 0; i < ground.length - 1 && i < 7; i++) {
+    const a = ground[i], b = ground[i + 1];
+    const along = new THREE.Vector3(b.x - a.x, 0, b.z - a.z);
+    const len = along.length();
+    along.normalize();
+    const g = new THREE.Group();
+    g.position.set((a.x + b.x) / 2, Math.min(a.y, b.y), (a.z + b.z) / 2);
+    g.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), along);
+    g.add(new THREE.Mesh(craggy(new THREE.BoxGeometry(len + 0.12, height, 0.24, 4, 4, 2).translate(0, height / 2, 0), 0.06), earthMat(form)));
+    g.scale.set(1, 0.01, 1);
+    const part = { g, alive: true, barrier: null, a, b };
+    const crumble = () => {
+      if (!part.alive) return;
+      part.alive = false; g.visible = false;
+      removeBarrier(part.barrier);
+      puff('terra', mid.copy(g.position).setY(g.position.y + height * 0.5), 26, 2.4, { jitter: len * 0.4 });
+    };
+    part.barrier = addBarrier(new THREE.BoxGeometry(len + 0.12, height, 0.26).translate(0, height / 2, 0), g, {
+      struck: () => {},                             // your own shots stop on it: it is cover, both ways
+      crumble,
+      reflect: form === 'metal',
+      damage: () => { puff('terra', mid.copy(g.position).setY(g.position.y + height * 0.6), 10, 2, {}); if (--part.barrier.hp <= 0) crumble(); },
+    });
+    part.barrier.hp = form === 'metal' ? 6 : 3;
+    part.crumble = crumble;
+    parts.push(part); groups.push(g);
+    puff('terra', g.position, 16, 2, { up: 2, jitter: len * 0.4 });
+    for (const e of echoes) if (!e.down && segmentDistance(e.group.position, a, b) < 0.45) hit(e, 'terra', t, UP, { damage: 1, launch: true, form });
+  }
+  firePulse(ground[ground.length >> 1]);
+  thump();
+  const until = t + 20, last = new Map();
+  addEffect(groups, (n) => {
+    const rise = Math.min((n - t) / 0.2, 1);
+    let any = false;
+    for (const part of parts) {
+      if (!part.alive) continue;
+      any = true;
+      part.g.scale.y = rise;
+      if (n > until) part.crumble();
+      else if (form === 'lava') {
+        lightNow(part.g.position, LAVA_LIGHT, 0.7);
+        for (const e of echoes) if (!e.down && n - (last.get(e) || -9) > 1.2 && segmentDistance(e.group.position, part.a, part.b) < 0.45) { last.set(e, n); hit(e, 'pyro', n, UP, { damage: 1 }); }
+      }
+    }
+    return any;
+  });
+  hudNote = 'ridge';
+  return { form, parts };
+}
+
 // ---------- senses ----------
 // Each one fills the whole room and tells you something different.
 //   Tremor (Terra): a ripple through every surface from where you touched. Shows where things are, once.
@@ -3122,7 +3636,7 @@ function selectElement(key, quiet) {
   for (const el of chipEls) el.classList.toggle('on', el.dataset.el === key);
   for (const el of moveEls) {
     const g = el.dataset.g;
-    el.textContent = g === 'sense' ? ELEMENTS[key].sense : MOVES[key][g].name;
+    el.textContent = g === 'sense' ? ELEMENTS[key].sense : g === 'draw' ? DRAWN[key] : MOVES[key][g].name;
     el.style.setProperty('--c', `#${ELEMENTS[key].color.getHexString()}`);
   }
   menuOrbs.forEach((orb, i) => orb.scale.setScalar(ELEMENT_ORDER[i] === key ? 1.6 : 1));
@@ -3276,6 +3790,7 @@ function newHand() {
     wrist: new THREE.Vector3(), knuckle: new THREE.Vector3(), indexBase: new THREE.Vector3(),
     pinkyBase: new THREE.Vector3(), indexTip: new THREE.Vector3(), hasTip: false,
     point: false, pointDir: new THREE.Vector3(),
+    thumbTip: new THREE.Vector3(), pinchPos: new THREE.Vector3(), pinch: false, wasPinch: false,
     prev: new THREE.Vector3(), vel: new THREE.Vector3(),
   };
 }
@@ -3332,7 +3847,7 @@ function readHand(frame, source, refSpace, st, dt) {
       !jointPos(frame, hand, 'middle-finger-phalanx-proximal', refSpace, st.knuckle) ||
       !jointPos(frame, hand, 'index-finger-metacarpal', refSpace, st.indexBase) ||
       !jointPos(frame, hand, 'pinky-finger-metacarpal', refSpace, st.pinkyBase)) {
-    st.valid = false; st.seen = false;            // tracking dropped: forget the velocity
+    st.valid = false; st.seen = false; st.pinch = false;            // tracking dropped: forget the velocity
     return;
   }
   st.valid = true;
@@ -3356,6 +3871,13 @@ function readHand(frame, source, refSpace, st, dt) {
   // Pointing: index out, the other three fingers tucked in.
   st.point = indexReach > CURL_OPEN && restN > 0 && restSum / restN / reach < CURL_FIST + 0.1;
   if (st.point) st.pointDir.subVectors(st.indexTip, st.indexBase).normalize();
+  // Pinching: thumb and index tips together while the other fingers stay out. Let go a little further apart than it took to start.
+  if (st.hasTip && jointPos(frame, hand, 'thumb-tip', refSpace, st.thumbTip)) {
+    const gap = st.thumbTip.distanceTo(st.indexTip);
+    st.pinchPos.addVectors(st.thumbTip, st.indexTip).multiplyScalar(0.5);
+    if (gap > PINCH_OFF) st.pinch = false;
+    else if (gap < PINCH_ON && restN > 0 && restSum / restN / reach > 1.4) st.pinch = true;
+  } else st.pinch = false;
   if (st.seen && dt > 0) {
     _raw.subVectors(st.palm, st.prev).divideScalar(dt);
     st.vel.lerp(_raw, 0.5);
@@ -3372,6 +3894,7 @@ function readHand(frame, source, refSpace, st, dt) {
 function updateHands(frame, refSpace, t, dt, viewerPos) {
   _fwd.set(0, 0, -1).applyQuaternion(viewerQuat);
   handState.left.valid = handState.right.valid = false;
+  streamCtl = null;                                // the hand that owns the stream says so again every frame
   for (const source of frame.session.inputSources) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
@@ -3470,6 +3993,34 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     }
     st.prevOtherFist = otherFist;
     if (near || t - st.clapBlock < 0.4) continue;
+    // Shaping. Aqua: a pinch draws the carried water out into a stream. The others trace a line.
+    if (selected === 'aqua') {
+      if (stream.on && stream.endOwner === st) {     // this hand has the far end
+        if (!st.pinch) stream.endOwner = null;
+        st.ready = false; st.charge = 0;
+        continue;
+      }
+      if (stream.on && stream.owner === st) {
+        if (st.pinch || st.curl < 1.45) {            // it stays out until the hand opens
+          if (!stream.endOwner && other.valid && other.pinch && !other.wasPinch && stream.nodes.some(n => n.p.distanceTo(other.pinchPos) < 0.25)) stream.endOwner = other;
+          streamCtl = { root: st.pinch ? st.pinchPos : st.knuckle, dir: reachDir, vel: st.vel, eye: viewerPos, grip: isFist, squeeze: otherFist && !stream.endOwner, end: stream.endOwner ? stream.endOwner.pinchPos : null };
+        }
+        st.ready = false; st.charge = 0; st.wasPinch = st.pinch;
+        continue;
+      }
+      if (!stream.on && st.pinch && !st.wasPinch) {
+        noteGesture('pinch');
+        streamCtl = { root: st.pinchPos, dir: reachDir, vel: st.vel, eye: viewerPos, grip: false, squeeze: false, end: null };
+        if (startStream(streamCtl, t)) { stream.owner = st; st.ready = false; st.wasPinch = true; continue; }
+      }
+    } else if (st.pinch) {
+      if (!drawing) drawBegin(selected, st.pinchPos, st);
+      else if (drawing.owner === st) drawAdd(st.pinchPos);
+      st.ready = false; st.charge = 0; st.wasPinch = true;
+      continue;
+    } else if (drawing && drawing.owner === st) drawEnd(t);
+    st.wasPinch = st.pinch;
+    if (selected === 'aero' && isOpen && st.speed > 0.4 && currents.length && bendCurrents(st.palm, st.vel, dt)) { st.ready = false; continue; }
     if (selected !== 'pyro') {
       if (isOpen && st.speed < 0.9) {                // an open hand reaching: show what it would take
         st.aim = findGrabTarget(selected, viewerPos, reachDir, t);
@@ -3582,7 +4133,7 @@ let previewGesture = 'sense';
 let previewHold = null;      // { kind, until, origin, dir }
 function selectGesture(g) {
   previewGesture = g;
-  if (squeezeBtn) squeezeBtn.style.display = g === 'grip' ? '' : 'none';
+  if (squeezeBtn) squeezeBtn.style.display = g === 'grip' || g === 'draw' ? '' : 'none';
   for (const el of moveEls) el.classList.toggle('on', el.dataset.g === g);
 }
 const pointer = new THREE.Vector2();
@@ -3603,6 +4154,16 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   const dir = aimPoint.clone().sub(hand).normalize();
   const fwd = flat(aim);
 
+  if (previewGesture === 'draw') {                 // press and drag: the pointer is the pinch
+    previewAim.copy(aim);
+    previewDraw.down = true;
+    if (selected === 'aqua') {
+      previewDraw.ctl = { root: previewPinch(new THREE.Vector3()), dir: aim.clone(), vel: new THREE.Vector3(), eye: eye.clone(), grip: false, squeeze: false, end: null };
+      streamCtl = previewDraw.ctl;
+      if (!startStream(streamCtl, t)) { streamCtl = previewDraw.ctl = null; }
+    } else drawBegin(selected, previewPinch(new THREE.Vector3()));
+    return;
+  }
   if (previewGesture === 'charge') { previewAim.copy(aim); previewGrip.chargeFrom = t; return; }
   if (previewGesture === 'grip') {
     previewAim.copy(aim);
@@ -3631,6 +4192,14 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
 // Preview grip: press and drag to hold, release to throw. C (or the Squeeze button) is the other fist.
 const previewGrip = { hold: null, chargeFrom: -1, squeeze: false, prevSqueeze: false };
 const previewAim = new THREE.Vector3(0, 0, -1);
+const previewDraw = { down: false, ctl: null };
+// Where the pinch is in the preview: on the surface under the pointer for fire and stone, out in the air for wind and water.
+function previewPinch(out) {
+  if (selected === 'aqua') return out.copy(camera.position).addScaledVector(previewAim, 0.9);
+  if (selected === 'aero') return out.copy(camera.position).addScaledVector(previewAim, 2.2);
+  const far = collide(camera.position, _cp.copy(camera.position).addScaledVector(previewAim, 8));
+  return far ? out.copy(far.point).addScaledVector(far.normal, 0.2) : out.copy(camera.position).addScaledVector(previewAim, 3);
+}
 const squeezeBtn = document.getElementById('squeeze');
 renderer.domElement.addEventListener('pointermove', (ev) => {
   if (renderer.xr.isPresenting) return;
@@ -3640,6 +4209,11 @@ renderer.domElement.addEventListener('pointermove', (ev) => {
 });
 const releasePreview = () => {
   if (renderer.xr.isPresenting) return;
+  if (previewDraw.down) {
+    previewDraw.down = false;
+    if (previewDraw.ctl) { previewDraw.ctl = null; streamCtl = null; stream.seenT = -9; }
+    else drawEnd(now());
+  }
   if (previewGrip.hold) endHold(previewGrip);
   if (previewGrip.chargeFrom >= 0) {
     const t = now(), charge = t - previewGrip.chargeFrom;
@@ -3666,7 +4240,7 @@ for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); se
 window.addEventListener('keydown', (ev) => {
   const i = '1234'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
-  const g = 'qwertyuio'.indexOf(ev.key.toLowerCase());
+  const g = 'qwertyuiop'.indexOf(ev.key.toLowerCase());
   if (g >= 0) selectGesture(GESTURES[g]);
 });
 
@@ -3779,6 +4353,17 @@ renderer.setAnimationLoop((ms, frame) => {
     camera.lookAt(0, 0.9, 0);
     viewerPos.copy(camera.position);
     if (!demoFired && t > 1.2) { demoFired = true; firePulse(new THREE.Vector3(-0.9, 0.74, -0.6)); }
+    if (previewDraw.down) {
+      if (previewDraw.ctl) {
+        const c = previewDraw.ctl;
+        const was = c.root.clone();
+        previewPinch(c.root);
+        c.vel.copy(c.root).sub(was).divideScalar(Math.max(dt, 1e-3));
+        c.dir.copy(previewAim); c.eye.copy(camera.position);
+        c.grip = previewGrip.squeeze;
+        streamCtl = c;
+      } else drawAdd(previewPinch(_cp));
+    }
     if (previewGesture === 'grip' || previewGesture === 'charge') {
       const hand = camera.position.clone().add(new THREE.Vector3(0.25, -0.3, -0.35).applyQuaternion(camera.quaternion));
       reticles[1].visible = chargeOrbs[1].visible = false;
@@ -3801,6 +4386,8 @@ renderer.setAnimationLoop((ms, frame) => {
     waterAnchorOn = selected === 'aqua';
     waterAnchor.copy(camera.position).add(_off.set(0.3, -0.18, -0.45).applyQuaternion(camera.quaternion));
   }
+  updateStream(t, dt);
+  updateCurrents(t, dt, viewerPos);
   if (waterBoost && selected === 'aqua') { waterAnchorOn = true; waterAnchor.copy(waterBoost).add(_off.set(0, 0.1, 0)); }
   updateWater(t, dt, waterAnchorOn ? waterAnchor : null, !!waterBoost && selected === 'aqua');
   waterBoost = null;
@@ -3823,6 +4410,8 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
+  stream, startStream, endStream, plantWall, currents, makeCurrent, bendCurrents, fireLine, raiseRidge, drawBegin, drawAdd, drawEnd,
+  get streamCtl() { return streamCtl; }, set streamCtl(v) { streamCtl = v; if (!v) stream.seenT = -9; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, throwCharged, kick,
   barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit, sources, addSource, water,
   cycleForm, get form() { return terraForm; }, setForm(f) { setForm('terra', f); }, forms, setFormOf: setForm, formOf, lights, KINDS, options, flipSwitch,

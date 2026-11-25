@@ -141,3 +141,4 @@ window.addEventListener('keydown', (ev) => {
 
 // Reached from modules that load before this one.
 Object.assign(L, { optionEls });
+L.previewHand = previewHand;

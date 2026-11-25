@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ELEMENTS, ELEMENT_ORDER, FORMS, forms, MOVES } from './data.js?v=14';
+import { ELEMENTS, ELEMENT_ORDER, FORMS, forms, MOVES, SENSE_HOW } from './data.js?v=14';
 import { tick } from './audio.js?v=14';
 import { S, L } from './state.js?v=14';
 import { chipEls, moveEls, formOf } from './core.js?v=14';
@@ -35,7 +35,7 @@ export function selectElement(key, quiet) {
     el.textContent = g === 'sense' ? ELEMENTS[key].sense : g === 'draw' ? DRAWN[key] : g === 'seal' ? SEALS[key].name : MOVES[key][g].name;
     el.style.setProperty('--c', `#${ELEMENTS[key].color.getHexString()}`);
   }
-  if (!quiet) { tick(); S.hudNote = `${ELEMENTS[key].label.toLowerCase()} ready`; }
+  if (!quiet) { tick(); S.hudNote = `${ELEMENTS[key].label.toLowerCase()} · sense: ${SENSE_HOW[key]}`; }
   L.drawHud();
 }
 

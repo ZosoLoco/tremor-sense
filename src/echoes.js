@@ -116,7 +116,7 @@ export function scatterEchoes(keepWorld = false) {
   if (!keepWorld) { clearBarriers(); L.clearShaping(); }
   const box = roomBounds();
   const eye = spawnEye(), taken = [];
-  S.activeCount = Math.min(2 + S.wave, ECHO_COUNT);
+  S.activeCount = Math.min(1 + S.wave, 6);          // waves build more slowly and top out lower
   echoes.forEach((e, i) => {
     if (i >= S.activeCount) {                          // not in this wave: parked out of the way
       e.down = true; e.downT = -1; e.group.visible = false; e.home.set(0, -50, 0); e.windup = -1;
@@ -127,7 +127,7 @@ export function scatterEchoes(keepWorld = false) {
     if (KINDS[e.kind].minWave > S.wave) e.kind = 'pebble';
     const KK = KINDS[e.kind];
     e.home.copy(KK.alt ? openSpot(box, Math.min(KK.alt, box.max.y - 0.4), Math.min(KK.alt + 0.25, box.max.y - 0.3), 0.3, eye, taken, 0.7) : openSpot(box, 0.5, 1.7, 0.3, eye, taken, 0.7));
-    e.group.scale.setScalar(KK.scale || 1);
+    e.group.scale.setScalar((KK.scale || 1) * 0.8);   // everything a little smaller: easier to read a room full of them
     L.dressEcho(e);
     taken.push(e.home.clone());
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;

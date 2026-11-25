@@ -15,7 +15,7 @@ import { ringFlourish, coneFlourish, dressEcho, shoveBarrier, cast } from './flo
 import { objects, spawnObject, scatterObjects, spawnCloud, ignite, kick, implode, explode, updateObjects } from './objects.js?v=14';
 import { sources, addSource, water, updateWater } from './water.js?v=14';
 import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, showCharge, throwCharged, throwFireball } from './grip.js?v=14';
-import { blades, summonBlade, updateBlades, voids, updateVoids, rain } from './constructs.js?v=14';
+import { blades, summonBlade, updateBlades, voids, updateVoids, rain, updateClaws, updateThreats } from './constructs.js?v=14';
 import { SEALS, resonate, updateStorm } from './seal.js?v=14';
 import { guard, updateGuard } from './guard.js?v=14';
 import { stream, startStream, endStream, updateStream, plantWall, drawBegin, drawAdd, drawEnd, familiars, summonFamiliar, currents, makeCurrent, _cp, updateCurrents, bendCurrents, fireLines, quench, fireLine, mirrorLine, rift, turrets, plantTurret, snare, constellation, raiseRidge } from './shaping.js?v=14';
@@ -114,6 +114,8 @@ renderer.setAnimationLoop((ms, frame) => {
   }
   updateGuard(t, dt);
   updateBlades(t, dt);
+  updateClaws(t, dt);
+  updateThreats(t);
   updateStorm(t);
   updateVoids(t);
   rain(t);

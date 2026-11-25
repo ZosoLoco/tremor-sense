@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { TOUCH_ON, SLAM_ON, TOUCH_OFF, CURL_OPEN, CURL_FIST, PUNCH_SPEED, PUSH_SPEED, LIFT_SPEED, SWEEP_SPEED, REARM_SPEED, CAST_COOLDOWN, HOLD_STILL, HOLD_TIME, POINT_SPEED, CLAP_ON, CLAP_OFF, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, FIST_SENSE, PALM_SENSE, TOUCH_SENSE, FORMS, MOVES } from './data.js?v=14';
-import { play, SFX, tick } from './audio.js?v=14';
+import { play, SFX, tick, thump } from './audio.js?v=14';
 import { S, L } from './state.js?v=14';
 import { formOf } from './core.js?v=14';
 import { renderer, UP, now } from './renderer.js?v=14';
 import { firePulse } from './pulse.js?v=14';
 import { nearestSurface } from './room.js?v=14';
-import { colliders, nearestRoomSurface } from './collision.js?v=14';
+import { colliders, nearestRoomSurface, collide } from './collision.js?v=14';
 import { aimAssist } from './creatures.js?v=14';
 import { cast } from './flourish.js?v=14';
 import { addSource } from './water.js?v=14';
@@ -57,6 +57,7 @@ function jointPos(frame, hand, name, refSpace, out) {
 //   curl: fingertip reach / knuckle reach.  normal: unit vector out of the palm.
 //   vel: palm velocity (m/s).  fwd: unit vector the head is facing.
 //   pointDir: unit vector along the index finger when the hand is pointing, otherwise null.
+const haul = { openT: -9, grabT: -9, span: 0.5, from: new THREE.Vector3(), dir: new THREE.Vector3() };
 export function classifyGesture(curl, normal, vel, fwd, pointDir = null) {
   const speed = vel.length();
   if (speed < 0.3) return null;
@@ -151,7 +152,7 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!S.sawHands && (L.valid || R.valid)) { S.sawHands = true; S.hudNote = 'build 13. open palm toward you: pick'; drawHud(); }
+  if (!S.sawHands && (L.valid || R.valid)) { S.sawHands = true; S.hudNote = 'build 14. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;
@@ -220,6 +221,22 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     }
   }
 
+  // The haul. Both hands open and apart, both close at once, and you pull: a great wall comes out of whatever you
+  // were reaching toward (floor, wall or ceiling) and stands there.
+  if (L.valid && R.valid && !menuHand && !L.hold && !R.hold && !stream.on) {
+    const span = L.palm.distanceTo(R.palm);
+    _cv.addVectors(L.palm, R.palm).multiplyScalar(0.5);
+    const bothOpen = L.curl > CURL_OPEN && R.curl > CURL_OPEN, bothFist = L.curl < CURL_FIST && R.curl < CURL_FIST;
+    if (bothOpen && span > 0.25 && span < 1.1) { haul.openT = t; haul.span = span; haul.grabT = -9; }
+    else if (bothFist && haul.grabT < 0 && t - haul.openT < 0.45) { haul.grabT = t; haul.from.copy(_cv); haul.dir.copy(_cv).sub(viewerPos).normalize(); }
+    else if (bothFist && haul.grabT > 0 && t - haul.grabT < 1.3 && _cv.distanceTo(haul.from) > 0.2) {
+      haul.grabT = -9; haul.openT = -9;
+      L.ready = R.ready = false; L.charge = R.charge = 0; L.lastCast = R.lastCast = t;
+      noteGesture('haul'); thump();
+      MOVES[S.selected].haul.width = Math.min(Math.max(haul.span * 3.4, 1.6), 3.4);
+      cast(S.selected, 'haul', { hand: haul.from.clone(), dir: haul.dir.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), t, power: 1.6 });
+    } else if (!bothFist && !bothOpen) { if (t - haul.grabT > 1.3) haul.grabT = -9; }
+  }
   // Guard: wrists crossed and held up in front of the chest.
   guard.on = false;
   if (L.valid && R.valid && !menuHand && !L.hold && !R.hold && L.wrist.distanceTo(R.wrist) < 0.16 && L.palm.distanceTo(R.palm) > 0.07) {
@@ -356,6 +373,17 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
         else if (gesture === 'shove') { c.hand = st.palm.clone(); c.dir = st.normal.clone(); }
         else if (gesture === 'point') { c.hand = st.indexTip.clone(); c.dir = st.pointDir.clone(); }
         else { c.hand = st.palm.clone(); c.dir = _fwd.clone(); }   // lift and sweep aim where you look
+        // A punch straight down is a slam, wherever your fist stops: it lands on whatever is under it. No need to hit the floor.
+        if (gesture === 'punch' && st.charge <= CHARGE_MIN && c.dir.clone().normalize().y < -0.72) {
+          const under = collide(st.knuckle, st.knuckle.clone().setY(st.knuckle.y - 2.6));
+          if (under) {
+            const twin = isTwin(st, other) && other !== menuHand && !other.hold;
+            if (twin) { other.ready = false; other.lastCast = t; }
+            noteGesture('down punch');
+            cast(S.selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: under.point, normal: under.normal, t, st, power: twin ? 1.6 : 1 });
+            continue;
+          }
+        }
         if (gesture === 'punch' && st.charge > CHARGE_MIN) {
           throwCharged(S.selected, c.hand, c.dir, c.eye, c.fwd, st.charge, t);
           st.charge = 0;
@@ -429,4 +457,4 @@ export function onSqueezeStart(event) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { _fwd, handShape });
+Object.assign(L, { _fwd, handShape, handState });

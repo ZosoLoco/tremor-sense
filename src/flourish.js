@@ -32,6 +32,16 @@ export function ringFlourish(key, m, centre, t) {
     for (let i = 0; i < 26; i++) { const [x, z, r] = rnd(i); const root = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.3 + (i % 4) * 0.08, 5).translate(0, 0.17, 0), basic(i % 3 ? 0x3d8a22 : 0x7a5230)); root.position.set(centre.x + x, centre.y, centre.z + z); root.rotation.set((i % 5 - 2) * 0.2, i, (i % 3 - 1) * 0.3); list.push({ mesh: root, at: r / 5, grow: 0.12, life: 1.1, axis: [0, 1, 0] }); }
   } else if (key === 'necro') {                     // hands
     for (let i = 0; i < 14; i++) { const [x, z, r] = rnd(i * 2); const hand = new THREE.Group(); for (let f = -1; f <= 1; f++) hand.add(new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.16, 4).translate(f * 0.03, 0.3, 0).rotateZ(f * -0.25), basic(0xeafff4))); hand.add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.24, 5).translate(0, 0.12, 0), basic(0xeafff4))); hand.material = { transparent: false, dispose() {} }; hand.position.set(centre.x + x, centre.y, centre.z + z); hand.rotation.y = i; list.push({ mesh: hand, at: r / 5, grow: 0.18, life: 0.9, axis: [0, 1, 0] }); }
+    for (let i = 0; i < 3; i++) {                    // and three of them come up to the waist with a blade, and swing it
+      const a = i * 2.1 + 0.4, r = Math.min(R * 0.5, 1.2), sk = new THREE.Group(), bone = basic(0xeafff4);
+      sk.add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6).translate(0, 0.62, 0), bone), new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.2, 0.08).translate(0, 0.42, 0), bone), new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.3, 5).translate(0, 0.17, 0), bone));
+      const arm = new THREE.Group(); arm.position.set(0.1, 0.5, 0);
+      arm.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.26).translate(0, 0, 0.13), bone), new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.5).translate(0, 0, 0.5), basic(0xbfd8d0)));
+      sk.add(arm); sk.material = { transparent: false, dispose() {} };
+      sk.position.set(centre.x + Math.cos(a) * r, centre.y, centre.z + Math.sin(a) * r); sk.rotation.y = -a + Math.PI / 2;
+      list.push({ mesh: sk, at: 0.15 + i * 0.08, grow: 0.2, life: 0.9, axis: [0, 1, 0] });
+      addEffect([], (n) => { arm.rotation.x = -1.2 + Math.min(Math.max((n - t - 0.4 - i * 0.08) / 0.18, 0), 1) * 2.2; return n - t < 1.6; });
+    }
   } else if (key === 'morph') {                     // a crown of bone thrown up round the foot
     for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 4).translate(0, 0.25, 0), basic(0xf0dccf)); spike.position.set(centre.x + Math.cos(a) * 0.8, centre.y, centre.z + Math.sin(a) * 0.8); spike.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6); list.push({ mesh: spike, at: 0.02 * (i % 3), grow: 0.07, life: 0.5, axis: [0, 1, 0] }); }
   } else if (key === 'lumen') {                     // shafts of light standing on the wave front

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ELEMENTS, FORMS, forms, MOVES } from './data.js?v=14';
 import { play, SFX, FORM_SFX, moveSound, thump, tick } from './audio.js?v=14';
 import { S, L } from './state.js?v=14';
+import { summonBlade, WEAPON } from './constructs.js?v=14';
 import { formOf } from './core.js?v=14';
 import { scene, UP, ZERO, now } from './renderer.js?v=14';
 import { FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=14';
@@ -357,6 +358,13 @@ export function drawEnd(t) {
     const made = summonFamiliar(d.key, centre, t);
     L.drawHud();
     return made;
+  }
+  // A V (any line with a hard corner in it) is a weapon: the discipline's own, in the hand that drew it.
+  if (WEAPON[d.key]) {
+    let corner = false;
+    for (let i = 2; i < d.pts.length - 1 && !corner; i++) { const a = d.pts[i].clone().sub(d.pts[i - 2]).normalize(), b = d.pts[Math.min(i + 2, d.pts.length - 1)].clone().sub(d.pts[i]).normalize(); if (a.dot(b) < -0.15) corner = true; }
+    const hand = d.owner || L.previewHand;
+    if (corner && hand) { const made = summonBlade(hand, t, d.key); L.drawHud(); return made; }
   }
   moveSound(d.key, 'draw', formOf(d.key) === FORMS[d.key][0] ? null : formOf(d.key)); S.lastCast = d.key;
   const made = d.key === 'aero' ? makeCurrent(d.pts, t) : d.key === 'pyro' ? fireLine(d.pts, t) : d.key === 'terra' ? raiseRidge(d.pts, t) : d.key === 'lumen' ? mirrorLine(d.pts, t) : d.key === 'gravis' ? rift(d.pts, t) : d.key === 'flora' ? snare(d.pts, t) : d.key === 'astra' ? constellation(d.pts, t) : d.key === 'morph' ? raiseRidge(d.pts, t, 'bone') : d.key === 'umbra' ? mirrorLine(d.pts, t, 'shadow') : d.key === 'necro' ? raiseRidge(d.pts, t, 'bone') : null;

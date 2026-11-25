@@ -29,7 +29,7 @@ const OBJ = {
 };
 export const HEAT_TIME = 10;                               // seconds stone and steel stay hot
 const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'barrel', 'barrel', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
-export const MAX_OBJECTS = 24;
+export const MAX_OBJECTS = 12;        // the room was getting crowded: half as many loose things, at most
 export const GRIP = { aero: 'Wind Grip', aqua: 'Water Grip', terra: 'Unearth', pyro: 'Fireball', lumen: 'Sunburst', gravis: 'Gravity Grip', flora: 'Vine Grip', astra: 'Meteor Shower', morph: 'Grapple', umbra: 'Black Sun', necro: 'Legion' };
 export const objects = [];
 const objGroup = new THREE.Group();
@@ -87,7 +87,7 @@ export function scatterObjects() {
   const box = roomBounds();
   const eye = spawnEye(), taken = [];
   const top = new THREE.Vector3(), bottom = new THREE.Vector3(), at = new THREE.Vector3();
-  for (const kind of ROUND_OBJECTS) {
+  for (const kind of ROUND_OBJECTS.filter((_, i) => i % 2 === 0)) {     // every other one: a few things to throw, not a storeroom
     const r = OBJ[kind].r;
     let placed = false;
     for (let i = 0; i < 40 && !placed; i++) {

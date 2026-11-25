@@ -949,7 +949,7 @@ export function castLance(key, m, c) {
 // --- Necro: thralls. The dead, raised. They hunt the nearest creature, bite it, and throw themselves in front of shards.
 export const thralls = [];
 export function raiseThrall(pos, t) {
-  if (thralls.length >= 4) thralls[0].until = 0;
+  if (thralls.length >= 3) thralls[0].until = 0;
   const g = new THREE.Group();
   const bone = new THREE.MeshBasicMaterial({ color: 0xeafff4 }), dark = new THREE.MeshBasicMaterial({ color: 0x06301f });
   g.add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8).scale(1, 1.1, 1.15), bone));                      // skull

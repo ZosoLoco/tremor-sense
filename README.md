@@ -252,3 +252,20 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
   health, wave, HUD text), and `L`, a late-bound registry so a module can call into one that loads after it.
 - A module imports directly from modules that load before it, and reaches later ones through `L`.
 - Every import carries the same `?v=` tag as `index.html`. Bump them together, or a browser will mix builds.
+
+## Build 14
+
+- **Less in the room.** Half as many loose objects (twelve at most), creatures 20% smaller, waves build more slowly
+  and top out at six, three thralls at most.
+- **Slam without the floor.** A punch straight down is a slam wherever your fist stops; it lands on whatever is under
+  it. Both fists down together is the empowered one. Fist on a surface still works, on any surface.
+- **The haul.** Both hands open and apart, close both at once and pull: a great wall comes out of whatever you were
+  reaching at and stands. Every discipline has one. Wider hands, wider wall.
+- **Sigils.** Pinch and draw: a line is the discipline's line, a closed loop summons its familiar, and a V (any hard
+  corner) puts its weapon in the hand that drew it for twelve seconds: fire sword, stone blade (in the current earth
+  form), wind edge, heavy blade, thorn lash, star blade, shadow blade, bone sword. Lumen's blade is still its sweep.
+- **Umbra's claws.** While in Umbra, an open hand wears a larger hand of shadow. Rake it and the claws cut.
+- **Necro's slam** brings three skeletons up to the waist, armed, and they swing.
+- **Threat arrows.** Something winding up, or already thrown, outside your view: a red arrow at the edge of your sight
+  points to it and a low note sounds.
+- **Sense hints.** Picking a discipline says how its sense is called.

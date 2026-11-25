@@ -500,12 +500,29 @@ function makeEcho() {
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.11, 0.118, 40), glowMat(ACID));
   const ice = new THREE.Mesh(new THREE.IcosahedronGeometry(0.125, 0), glowMat(ICE, 0.32));
   ice.visible = false;
-  g.add(core, shell, halo, ice);
+  // A face, so it reads as a creature: a soft body with two eyes that watch you, and a tail that trails behind it.
+  const face = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.07, 18, 14).scale(1, 0.85, 1.1), glowMat(ACID));
+  const eyes = [-1, 1].map((side) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), glowMat(new THREE.Color(0xffffff)));
+    eye.position.set(side * 0.03, 0.018, 0.068);
+    face.add(eye);
+    return eye;
+  });
+  face.add(body);
+  const tail = [0.045, 0.036, 0.028, 0.02, 0.013].map((r) => {
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), glowMat(ACID));
+    bead.visible = false; bead.renderOrder = 10;
+    echoGroup.add(bead);
+    return bead;
+  });
+  g.add(core, shell, halo, ice, face);
   g.renderOrder = 10;
   g.visible = false;
   echoGroup.add(g);
   return {
-    group: g, core, shell, halo, ice, parts: [core, shell, halo],
+    group: g, core, shell, halo, ice, face, body, eyes, tail, parts: [core, shell, halo, body, ...tail],
+    goal: new THREE.Vector3(), goalUntil: 0, windup: -1, puppet: false, moving: 0, last: new THREE.Vector3(),
     home: new THREE.Vector3(), phase: Math.random() * 6.28,
     revealedUntil: -1, level: 0, down: false, downT: -1, push: new THREE.Vector3(),
     hp: 2, restY: 0, vel: new THREE.Vector3(), airborne: false, flashT: -1,
@@ -574,12 +591,16 @@ function scatterEchoes() {
     e.hp = 2; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
     e.burnAt = e.soakedUntil = e.frozenUntil = -1;
     e.baseColor.copy(ACID); e.ice.visible = false; e.shell.scale.setScalar(1);
+    e.goal.copy(e.home); e.goalUntil = 0; e.windup = -1; e.puppet = false; e.last.copy(e.home);
+    for (const bead of e.tail) { bead.position.copy(e.home); bead.visible = false; }
     for (const m of e.parts) m.material.color.copy(ACID);
     e.group.scale.setScalar(1);
     e.group.position.copy(e.home);
     e.group.visible = false;
   }
   downCount = 0;
+  playerHP = MAX_HP;
+  nextAttackAt = now() + CREATURE.firstAttack;
   scatterObjects();
   drawHud();
 }
@@ -601,6 +622,8 @@ function defeat(e, elementKey, t, pushDir) {
   for (const m of e.parts) { m.material.color.copy(ELEMENTS[elementKey].color); m.material.opacity = 1; }
   e.group.visible = true;
   e.ice.visible = false;
+  e.windup = -1;
+  for (const bead of e.tail) bead.visible = false;
   downCount++;
   puff(elementKey, e.group.position, 26, 2.4, pushDir && pushDir.lengthSq() ? { dir: pushDir, spread: 1.1 } : {});
   hitSound();
@@ -655,6 +678,81 @@ function hit(e, key, t, dir, m = {}) {
   }
 }
 
+// ---------- creature behaviour ----------
+// They drift around the room out of sight, and every few seconds one of them stops, swells, and spits a shard at you.
+// The shard is a real object: block it with a wall, knock it away, blow it back, or catch it and return it.
+const CREATURE = { speed: 0.7, firstAttack: 7, attackEvery: 4.2, windup: 0.9, shotSpeed: 3.2, sight: 11, maxShots: 2 };
+const AI = { on: true };
+const HOSTILE = new THREE.Color(0xff2bd6);
+const MAX_HP = 5;
+let playerHP = MAX_HP, hurtT = -9, nextAttackAt = 0;
+
+function pickGoal(e, t) {
+  const box = roomBounds();
+  const p = new THREE.Vector3();
+  e.goal.copy(e.home);
+  for (let i = 0; i < 8; i++) {
+    p.set(THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), THREE.MathUtils.lerp(0.5, 1.7, Math.random()), THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()));
+    if (isOpen(p, 0.25, e.home)) { e.goal.copy(p); break; }      // only somewhere it can fly to in a straight line
+  }
+  e.goalUntil = t + 3 + Math.random() * 4;
+}
+const _cdir = new THREE.Vector3(), _cprobe = new THREE.Vector3();
+function creatureAI(e, t, dt, eye) {
+  if (e.frozenUntil > t || e.airborne || e.puppet) { e.windup = -1; return; }
+  if (e.windup > 0) {                              // winding up: holds still, pulls light into itself
+    if (t >= e.windup) { e.windup = -1; spit(e, eye, t); }
+    else {
+      _cdir.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(0.3);
+      _cprobe.copy(e.home).add(_cdir);
+      particles.emit(_cprobe, _cdir.multiplyScalar(-3), HOSTILE, 0.02, 0.1, 0, 0);
+    }
+    return;
+  }
+  if (t > e.goalUntil || e.home.distanceTo(e.goal) < 0.08) pickGoal(e, t);
+  _cdir.copy(e.goal).sub(e.home);
+  const dist = _cdir.length();
+  if (dist < 1e-3) return;
+  _cdir.divideScalar(dist);
+  const move = Math.min(CREATURE.speed * dt, dist);
+  if (collide(e.home, _cprobe.copy(e.home).addScaledVector(_cdir, move + 0.2))) { e.goalUntil = 0; return; }   // something new in the way
+  e.home.addScaledVector(_cdir, move);
+  e.restY = e.home.y;
+}
+function spit(e, eye, t) {
+  const dir = eye.clone().sub(e.home).normalize();
+  const o = spawnObject('shard', e.home.clone().addScaledVector(dir, 0.3));
+  o.hostile = true; o.owner = e; o.born = t;
+  o.vel.copy(dir).multiplyScalar(CREATURE.shotSpeed);
+  tone(700, 240, 0.25, 0.14, 'sawtooth');
+}
+// Each frame: choose who attacks next.
+function directAttacks(t, eye) {
+  if (!AI.on || t < nextAttackAt) return;
+  if (objects.filter(o => o.hostile && !o.dead).length >= CREATURE.maxShots) return;
+  const able = echoes.filter(e => !e.down && e.windup < 0 && !(e.frozenUntil > t) && !e.airborne && !e.puppet
+    && e.home.distanceTo(eye) < CREATURE.sight && lineOfSight(e.home, eye));
+  nextAttackAt = t + CREATURE.attackEvery * (0.7 + Math.random() * 0.6);
+  if (!able.length) return;
+  const e = able[(Math.random() * able.length) | 0];
+  e.windup = t + CREATURE.windup;
+  reveal(e, t, 3, HOSTILE);                         // attacking gives its position away
+}
+function playerHurt(t) {
+  if (t - hurtT < 0.6) return;
+  hurtT = t;
+  playerHP--;
+  tone(110, 50, 0.4, 0.5, 'square');
+  hudNote = playerHP > 0 ? 'you were hit' : 'down. new round';
+  if (playerHP <= 0) respawnAt = t + 1.8;
+  drawHud();
+}
+// A red flash around your head when something lands.
+const hurtShell = new THREE.Mesh(new THREE.SphereGeometry(0.45, 20, 14), new THREE.MeshBasicMaterial({
+  color: 0xff1a2a, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+hurtShell.renderOrder = 30;
+scene.add(hurtShell);
+
 const _step = new THREE.Vector3(), _next = new THREE.Vector3();
 function moveEcho(e, t, dt) {
   if (e.airborne) {                                 // tossed: rise, hang, come back down to where it floats
@@ -703,12 +801,16 @@ function updateEchoes(t, dt, viewerPos) {
     }
     if (e.down) continue;
     if (e.burnAt > 0 && t >= e.burnAt) { e.burnAt = -1; hit(e, 'pyro', t, UP, { damage: 1, noBurn: true }); if (e.down) continue; }
+    if (AI.on) creatureAI(e, t, dt, viewerPos);
     moveEcho(e, t, dt);
+    e.moving = dt > 0 ? e.home.distanceTo(e.last) / dt : 0;
+    e.last.copy(e.home);
     const frozen = e.frozenUntil > t, soaked = e.soakedUntil > t, burning = e.burnAt > 0;
     // A marked or airborne echo stays in view until the mark wears off.
     const markEnd = Math.max(e.frozenUntil, e.soakedUntil, e.burnAt, e.airborne ? t + 0.5 : -1);
     if (markEnd > t) e.revealedUntil = Math.max(e.revealedUntil, markEnd);
-    const tint = frozen ? ICE : burning ? ELEMENTS.pyro.color : soaked ? ELEMENTS.aqua.color : e.baseColor;
+    const winding = e.windup > 0;
+    const tint = winding ? HOSTILE : frozen ? ICE : burning ? ELEMENTS.pyro.color : soaked ? ELEMENTS.aqua.color : e.baseColor;
     for (const m of e.parts) m.material.color.copy(tint);
     e.ice.visible = frozen;
     e.shell.scale.setScalar(e.hp < 2 ? 0.7 : 1);                // cracked down to its core
@@ -732,7 +834,21 @@ function updateEchoes(t, dt, viewerPos) {
       e.shell.rotation.set(t * 0.7 + e.phase, t * 0.9, 0);
     }
     e.halo.lookAt(viewerPos);
+    e.face.lookAt(viewerPos);
+    e.body.material.opacity = o * 0.3;
+    for (const eye of e.eyes) eye.material.opacity = o;
+    e.group.scale.setScalar(winding ? 1 + 0.5 * (1 - (e.windup - t) / CREATURE.windup) : 1);
+    let lead = e.group.position;                    // the tail: each bead chases the one in front of it
+    e.tail.forEach((bead, i) => {
+      bead.position.lerp(lead, Math.min(dt * (14 - i * 1.5), 1));
+      bead.visible = e.group.visible && !frozen;
+      bead.material.opacity = o * 0.5 * (1 - i / 6);
+      lead = bead.position;
+    });
   }
+  directAttacks(t, viewerPos);
+  hurtShell.position.copy(viewerPos);
+  hurtShell.material.opacity = Math.max(0.55 * (1 - (t - hurtT) / 0.5), 0);
   if (respawnAt > 0 && t > respawnAt) { respawnAt = -1; scatterEchoes(); }
 }
 
@@ -1171,7 +1287,12 @@ function castCone(key, m, c) {
     _to.copy(o.pos).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, o.pos)) {
       const push = key === 'aero' ? 8 : 3;
+      const wasHostile = o.hostile;
       kick(o, d.x * push, 1.5, d.z * push);
+      if (wasHostile && o.owner && !o.owner.down) {  // blown straight back at whoever sent it
+        o.vel.copy(o.owner.group.position).sub(o.pos).normalize().multiplyScalar(9);
+        hudNote = 'deflect'; drawHud();
+      }
       if (key === 'pyro') ignite(o, c.t);
     }
   }
@@ -1480,7 +1601,7 @@ function castWall(key, m, c) {
         if (o.dead || o.held) continue;
         _to.copy(o.pos).sub(wall.position);
         if (Math.abs(_to.dot(d)) < 0.35 + step && Math.abs(_to.dot(right)) < m.width / 2 && o.pos.y < m.height) {
-          o.vel.x = d.x * 5.5; o.vel.z = d.z * 5.5; o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false;
+          o.vel.x = d.x * 5.5; o.vel.z = d.z * 5.5; o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false; turn(o);
         }
       }
     }
@@ -1675,7 +1796,7 @@ function castVoid(key, m, c) {
       }
       for (const o of objects) {
         if (o.dead || o.held || o.pos.distanceTo(centre) > m.radius) continue;
-        o.rest = false;
+        o.rest = false; turn(o);
         o.vel.copy(centre).sub(o.pos).multiplyScalar(7);
       }
       if (k >= 1) {
@@ -1736,6 +1857,7 @@ const OBJ = {
   bigcrate: { r: 0.36, mass: 3, bounce: 0.25, key: 'aero',  burns: true },               // a shipping crate
   boulder:  { r: 0.42, mass: 6, bounce: 0.15, key: 'terra', earth: true },               // takes real effort to move
   anvil:    { r: 0.22, mass: 5, bounce: 0.25, key: 'terra', earth: true },               // a block of iron
+  shard:    { r: 0.09, mass: 0.5, bounce: 0.3, key: 'terra', earth: true },              // what the creatures spit
 };
 const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
 const MAX_OBJECTS = 24;
@@ -1748,6 +1870,11 @@ function objectMesh(kind) {
   if (kind === 'crate') return new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32, 3, 3, 3), stoneMat(false, { dark: 0x2b1708, light: 0x8f5c2a, seam: 0x1a0d04, amt: 0.9, grain: [1.5, 22, 1.5] }));
   if (kind === 'keg') return new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 12, 3), stoneMat(false, { dark: 0x3a0a06, light: 0xc22d18, seam: 0xffc21a, amt: 0.9, grain: [3, 9, 3] }));
   if (kind === 'ball') return new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 2), stoneMat(true));
+  if (kind === 'shard') {
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0).scale(0.7, 0.7, 1.6), glowMat(HOSTILE, 0.95));
+    m.renderOrder = 14;
+    return m;
+  }
   if (kind === 'bigcrate') return new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.58, 0.58, 4, 4, 4), stoneMat(false, { dark: 0x24140a, light: 0x7a5228, seam: 0x140a03, amt: 0.9, grain: [1.2, 16, 1.2] }));
   if (kind === 'boulder') return new THREE.Mesh(craggy(new THREE.IcosahedronGeometry(0.42, 2), 0.13), stoneMat());
   if (kind === 'anvil') return new THREE.Mesh(craggy(new THREE.BoxGeometry(0.36, 0.26, 0.26, 3, 2, 2), 0.02), stoneMat(true));
@@ -1755,7 +1882,7 @@ function objectMesh(kind) {
 }
 function spawnObject(kind, pos) {
   if (objects.filter(o => !o.dead).length >= MAX_OBJECTS) {         // keep the room from filling up: retire the oldest loose one
-    const old = objects.find(o => !o.dead && !o.held);
+    const old = objects.find(o => !o.dead && !o.held && !o.hostile);
     if (old) old.dead = true;
   }
   const mesh = objectMesh(kind);
@@ -1803,7 +1930,9 @@ function ignite(o, t) {
   else if (o.def.burns && o.burnUntil < 0) o.burnUntil = t + 2.5;
 }
 // Push on an object. Wakes it if it was resting.
-function kick(o, x, y, z) { o.vel.x += x / o.def.mass; o.vel.y += y / o.def.mass; o.vel.z += z / o.def.mass; o.rest = false; }
+function kick(o, x, y, z) { o.vel.x += x / o.def.mass; o.vel.y += y / o.def.mass; o.vel.z += z / o.def.mass; o.rest = false; turn(o); }
+// A hostile shard that you have touched with anything is yours now, and hits harder going back.
+function turn(o) { if (o.hostile) { o.hostile = false; o.turned = true; } }
 
 // A blast: hurts echoes, throws objects, lights what can burn.
 function explode(point, key, radius, t, dmg) {
@@ -1864,6 +1993,19 @@ function updateObjects(t, dt) {
         continue;
       }
     }
+    if (o.hostile) {                                // still theirs: flies straight at where you were standing
+      o.pos.addScaledVector(o.vel, dt);
+      o.mesh.lookAt(_op.copy(o.pos).add(o.vel));
+      o.mesh.position.copy(o.pos);
+      if (Math.random() < 0.6) particles.emit(o.pos, _od.set(0, 0, 0), HOSTILE, 0.03, 0.25, 0, 0);
+      const wall = collide(_on.copy(o.pos).addScaledVector(o.vel, -dt), o.pos);
+      if (wall || o.pos.y < r || t - o.born > 9) {
+        if (wall && wall.object.userData.barrier) wall.object.userData.barrier.damage(t);
+        o.dead = true; tick();
+        for (let k = 0; k < 14; k++) particles.emit(o.pos, _od.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3), HOSTILE, 0.03, 0.3, 4, 1);
+      } else if (o.pos.distanceTo(viewerPos) < 0.3) { o.dead = true; playerHurt(t); }
+      continue;
+    }
     if (!o.rest) {
       if (!o.held) o.vel.y -= 9.8 * dt;
       const speed = o.vel.length();
@@ -1903,7 +2045,8 @@ function updateObjects(t, dt) {
         for (const e of echoes) {
           if (!isLive(e, t) || e.group.position.distanceTo(o.pos) > r + 0.14) continue;
           o.hitT = t;
-          hit(e, o.def.earth ? 'terra' : 'aero', t, _od, { damage: o.def.mass >= 2 ? 2 : 1 });
+          hit(e, o.def.earth ? 'terra' : 'aero', t, _od, { damage: o.def.mass >= 2 || o.turned ? 2 : 1 });
+          if (o.kind === 'shard') { o.dead = true; break; }
           if (o.def.explodes && speed > 4) ignite(o, t);
           o.vel.multiplyScalar(-0.35);
           break;
@@ -1919,6 +2062,10 @@ function updateObjects(t, dt) {
     for (let j = i + 1; j < objects.length; j++) {
       const b = objects[j];
       if (b.dead || (a.rest && b.rest)) continue;
+      if (a.hostile || b.hostile) {                 // a shard breaks on anything you put in its way
+        if (a.pos.distanceTo(b.pos) < a.def.r + b.def.r) { (a.hostile ? a : b).dead = true; tick(); }
+        continue;
+      }
       _od.copy(b.pos).sub(a.pos);
       const gap = _od.length(), min = a.def.r + b.def.r;
       if (gap >= min || gap < 1e-4) continue;
@@ -1981,7 +2128,8 @@ function beginHold(g, key, target, eye, t) {
     firePulse(target.pos);
     type = 'object';
   }
-  if (obj) { obj.held = true; obj.rest = false; }
+  if (obj) { obj.held = true; obj.rest = false; turn(obj); }
+  if (target.e) target.e.puppet = true;
   g.hold = { key, type, obj, e: target.e || null, dist: (obj ? obj.pos : target.pos).distanceTo(eye),
     pv: new THREE.Vector3(), lastSlam: -9, lastWring: -9, reach0: 1 };
   lastCast = key; castSound[key]();
@@ -1993,7 +2141,7 @@ const _want = new THREE.Vector3(), _hstep = new THREE.Vector3(), _hnext = new TH
 function updateHold(g, eye, dir, reach, input, t, dt) {
   const h = g.hold;
   if (!h) return;
-  if ((h.obj && h.obj.dead) || (h.e && h.e.down)) { g.hold = null; return; }
+  if ((h.obj && h.obj.dead) || (h.e && h.e.down)) { if (h.e) h.e.puppet = false; g.hold = null; return; }
   const dist = THREE.MathUtils.clamp(h.dist * reach * reach, 0.5, 12);    // push your arm out and it goes further away
   _want.copy(eye).addScaledVector(dir, dist);
   _want.y = Math.max(_want.y, 0.15);
@@ -2068,6 +2216,7 @@ function endHold(g) {
     }
   }
   else if (h.e && !h.e.down) { h.e.vel.x = h.pv.x * 0.6; h.e.vel.z = h.pv.z * 0.6; }
+  if (h.e) h.e.puppet = false;
   g.hold = null;
 }
 
@@ -2237,13 +2386,18 @@ function drawHud() {
   c.fillStyle = '#b6ff3c';
   c.textAlign = 'right';
   c.fillText(`${downCount}/${ECHO_COUNT}`, 478, 68);
+  for (let i = 0; i < MAX_HP; i++) {                // health pips
+    c.beginPath(); c.arc(470 - i * 24, 138, 8, 0, Math.PI * 2);
+    c.fillStyle = i < playerHP ? '#ff4d6a' : 'rgba(255,77,106,0.18)';
+    c.fill();
+  }
   c.textAlign = 'left';
   c.fillStyle = '#cfd6d2';
   c.font = '30px ui-monospace, Menlo, Consolas, monospace';
   c.fillText(downCount === ECHO_COUNT ? 'room clear. resetting…' : hudNote, 36, 138);
   hudTex.needsUpdate = true;
   if (!renderer.xr.isPresenting) {
-    statusEl.textContent = `Echoes struck: ${downCount}/${ECHO_COUNT}` + (xrSupported ? '' : ' · preview mode');
+    statusEl.textContent = `Echoes struck: ${downCount}/${ECHO_COUNT} · health ${playerHP}/${MAX_HP}` + (xrSupported ? '' : ' · preview mode');
   }
 }
 
@@ -2758,7 +2912,8 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin,
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
-  barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers,
+  barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit,
+  get hp() { return playerHP; }, attackSoon() { nextAttackAt = 0; },
   setHold(h) { previewHold = h; },
   get down() { return downCount; },
   get selected() { return selected; },

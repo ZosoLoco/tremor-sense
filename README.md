@@ -1,60 +1,78 @@
 # Tremor Sense
 
-Mixed reality prototype for the Terra discipline. Open the page in the Quest 3 browser, enter mixed reality, and:
+Mixed reality prototype for Resonance: four disciplines, hand tracked, in your real room. Open the page in the Quest 3 browser and enter mixed reality.
 
 **Pick a discipline:** turn an open palm toward your face and poke one of the four orbs with your other index finger.
 
-**Sense first.** Each discipline finds the hidden echoes a different way:
+## The creatures
 
-| Discipline | Sense | Trigger | What it can and cannot find |
+Six creatures drift around the room out of sight. Every few seconds one stops, swells, turns magenta and spits a shard at you. Five hits and the round resets. The shard is a physical object, so you have options:
+
+- **Block:** a Rampart or Spire takes the hit (three hits breaks it).
+- **Deflect:** Gust or Flame Burst sends it straight back at the creature that fired it.
+- **Catch:** grab it with Wind Grip, Water Grip or Unearth and throw it back. Returned shards hit twice as hard.
+- **Knock it away:** any move or object that touches it turns it.
+
+Creatures take two hits. Attacking gives away a creature's position for a few seconds.
+
+## Senses
+
+Each fills the whole room and tells you something different.
+
+| Discipline | Sense | Trigger | What you get |
 |---|---|---|---|
-| Terra | Tremor Sense | open palm on a real surface | A ripple through the room. Passes through everything, but takes time to travel. |
-| Pyro | Chi Sense | hold a raised fist still | Everything within about 3 m of you, through walls. Nothing beyond. |
-| Aqua | Tide Sense | hold a raised open palm out, still | A narrow beam you sweep around. Long range, through walls. |
-| Aero | Draft Sense | clap | A fast burst in every direction. Only finds what it has a clear line to. |
+| Terra | Tremor | open palm on a real surface | A ripple through every surface. Shows where everything is, once. |
+| Aero | Draft | clap | The room's air made visible for 9 s. Anything that moves gives itself away and leaves a trail. |
+| Pyro | Chi | hold a raised fist still | Heat and life through walls for as long as you hold. Every creature, plus a heat ghost on every object: bright if it is burning, molten or explosive. |
+| Aqua | Tide | hold a raised open palm out | Water spreads across the whole floor. Everything standing over it shows as ripples, creatures and objects alike. |
 
-**Then strike.** Six verbs, and every discipline answers them differently:
+## Moves
 
-| | Punch (fist forward) | Shove (open palm forward) | Lift (palm up, raise) | Sweep (open hand sideways) | Slam (fist on a surface) | Point (index finger jab) |
+| | Punch | Shove | Lift (palm up, raise) | Sweep (open hand sideways) | Slam (fist on a surface) | Point (index finger jab) |
 |---|---|---|---|---|---|---|
 | Terra | Stone Shot | Boulder | Spire | Rampart | Fault Line | Ferro Disc |
 | Pyro | Ember | Flame Burst | Pyre | Fire Arc | Eruption | Volt |
-| Aqua | Jet | Breaker | Geyser | Riptide | Surge | Frost Needle |
+| Aqua | Globe | Breaker | Geyser | Whip | Surge | Frost Needle |
 | Aero | Air Bullet | Gust | Updraft | Air Blade | Shockwave | Void |
 
-**Grip.** Reach an open hand at something (a ring shows what you would take), close your fist to hold it, open your hand to let go.
+**Twin casts.** The same move with both hands together comes out bigger and one point harder.
+
+**Earth from any surface.** Spire grows out of whichever surface is nearest its target: floor, wall, ceiling or table. Unearth pulls a boulder out of whatever you reach at.
+
+**Defence.** A Spire stays where it grew for 18 s. A Rampart stands for 30 s and blocks like a real wall, for you as well as for them. Hit it with a punch or a shove and it charges in that direction.
+
+## Water
+
+- **Sources.** In Aqua, an open palm on any surface starts water welling up there for 35 s. Geyser and Surge leave a source where they came up. A broken water barrel leaves one too.
+- **Carried water.** While a source is running, water streams across the room to your hand and gathers there, up to three measures. Each Aqua move spends one, leaves from the water and hits a point harder. With none, Aqua still works at base strength.
+- **Whip.** Aqua's sweep is one long lash across everything in front of you.
+
+## Grip
+
+Reach an open hand at something (a ring shows what you would take), close your fist to hold it, open your hand to let go.
 
 | Discipline | Grip | What it does |
 |---|---|---|
-| Aero | Telekinesis | Holds any object you have a clear line to. It follows your hand; push your arm out to send it further. Let go mid-swing to throw. Close your other fist to crush it. |
-| Aqua | Puppetry | Holds an echo by the water in it, even through walls. Drag it into furniture or another echo to slam it, or close your other fist to wring it. |
-| Terra | Unearth | Holds stone and steel. Reach at bare floor and it tears out a fresh boulder to throw. |
-| Pyro | Fireball | Keep a raised fist closed to grow a fireball in it, then punch to throw. It explodes on impact. |
+| Aero | Wind Grip | Bands of wind wind round any object or cloud you have a clear line to. Carry it, thrust your arm out to throw it, close your other fist to crush it. |
+| Aqua | Water Grip | Water closes over an object, or takes a creature by the water in it, even through walls. Slam it into things, or wring it with your other fist. |
+| Terra | Unearth | Holds stone and steel, or tears a fresh boulder out of any surface. |
+| Pyro | Fireball | Keep a raised fist closed to grow a fireball, then punch to throw. |
 
-**Objects.** Each round scatters crates, a powder keg, stone blocks and a steel ball on the floor. Each round scatters them on whatever is underneath: floor, table or couch. They fall, land on table tops, slide off edges, bounce off walls and furniture, knock into each other, and hurt any echo they hit at speed. Every move pushes them: Gust flings them, lifts and rings toss them, Rampart bulldozes them, Void drags them together. Fire lights crates (they burn away) and sets off the keg, which blasts everything nearby and can chain.
+## Matter changes state
 
-**Twin casts.** Make the same move with both hands together and it comes out bigger and one point harder.
-
-**Echoes take two hits, and each discipline marks them differently:**
-
-- **Pyro burns.** A second point of damage lands by itself 1.5 s later.
-- **Aqua soaks.** No extra damage, but it sets up Volt and puts out a burn.
-- **Frost Needle freezes** an echo in place for 6 s.
-- **Terra hits twice as hard**, so stone kills in one, but its moves are slow or need setup.
-- **Aero shoves** echoes across the room. Void drags everything near a point into one spot.
-- **Lifts and Surge toss** echoes into the air for a couple of seconds.
-
-**Marks combine:**
-
-| Setup | Finisher | Result |
+| From | Do this | Get |
 |---|---|---|
-| Soaked | Volt | Conducts: instant kill, and it jumps to every other soaked echo in reach |
-| Frozen | Any Terra move | Shatters: instant kill, and the shards hurt everything within a metre |
-| Airborne | Any Aero move | Air finish: instant kill |
-| Soaked | Any other Pyro move | Steam: the soak and the burn cancel out |
-| Frozen | Any Pyro move | Thaws it back to soaked |
+| Water source or barrel | Frost Needle | Blocks of ice. They slide, and a thrown one freezes what it hits. |
+| Ice | Any fire | A water source again. |
+| Water source | Any fire | A steam cloud. It scalds creatures inside it. Gust blows it around; Wind Grip carries it. |
+| Stone or boulder | Any fire | Molten rock for 10 s. It leaves what it hits burning and sets light to what it touches. Steel goes red hot the same way. |
+| Stone or boulder | Crush with Wind Grip | A sand cloud. Creatures inside it are blinded: they stop moving and cannot attack. Terra can carry it. |
 
-**The room is solid.** Anything that flies stops at real walls and furniture (Air Bullet ricochets twice, Ferro Disc three times, Breaker rolls through). Lightning stops at the first surface. Columns, ground rings and Fault Line come up from the floor, so they reach behind cover. Gust, Flame Burst and Void need a clear line.
+Marks on creatures combine as before: soaked + Volt conducts, frozen + Terra shatters, airborne + Aero finishes, fire + water makes steam.
+
+## Objects
+
+Each round lays out a dozen: crates, a shipping crate, powder kegs, water barrels, stone blocks, a boulder, a steel ball and an anvil. They start in open space on whatever is underneath, land on table tops, fall off edges, bounce off the room and each other, and hurt creatures they hit at speed. Heavy ones lag behind your hand.
 
 Controllers work as a fallback: trigger punches at what you point at (or senses), grip changes discipline. Holds need hand tracking.
 

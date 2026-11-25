@@ -3,15 +3,19 @@
 // Pick a discipline (look at an open palm, poke an orb with the other index finger),
 // then use the same six hand verbs. Each discipline answers them differently.
 //
-//            SENSE                  PUNCH        SHOVE        LIFT     SWEEP      SLAM (fist on surface)  POINT (index finger jab)
-//   TERRA    palm on a surface      Stone Shot   Boulder      Spire    Rampart    Fault Line              Ferro Disc
-//   PYRO     raised fist, held      Ember        Flame Burst  Pyre     Fire Arc   Eruption                Volt
-//   AQUA     raised palm, held      Jet          Breaker      Geyser   Riptide    Surge                   Frost Needle
-//   AERO     clap                   Air Bullet   Gust         Updraft  Air Blade  Shockwave               Void
+//            SENSE (fills the room)      PUNCH        SHOVE        LIFT     SWEEP      SLAM (fist on surface)  POINT (index finger jab)
+//   TERRA    Tremor: palm on a surface   Stone Shot   Boulder      Spire    Rampart    Fault Line              Ferro Disc
+//   PYRO     Chi: raised fist, held      Ember        Flame Burst  Pyre     Fire Arc   Eruption                Volt
+//   AQUA     Tide: raised palm, held     Globe        Breaker      Geyser   Whip       Surge                   Frost Needle
+//   AERO     Draft: clap                 Air Bullet   Gust         Updraft  Air Blade  Shockwave               Void
+//
+// Spire grows out of whichever surface is nearest its target and stays as cover. Rampart stands until you hit it, then charges.
+// Aqua: an open palm on any surface starts a water source; water from a source gathers at your hand and powers the next move.
+// Matter changes state: frost turns standing water to ice, fire turns it to steam, fire makes stone molten, crushing stone makes sand.
 //
 // GRIP (close an open hand while reaching at something, open it to let go):
-//   AERO  Telekinesis  hold and throw any object you can see; close the other fist to crush it
-//   AQUA  Puppetry     hold an echo by the water in it, through walls; slam it around, or wring it with the other fist
+//   AERO  Wind Grip    wind winds round any object (or cloud) you can see: carry it, throw it, crush it with the other fist
+//   AQUA  Water Grip   water closes over an object, or takes hold of a creature by the water in it, through walls
 //   TERRA Unearth      hold stone and steel, or reach at the floor to tear out a fresh boulder
 //   PYRO  Fireball     keep a raised fist closed to grow a fireball, then punch to throw it
 //
@@ -568,7 +572,7 @@ function isOpen(p, radius, eye, needFloorGap = true) {
   const above = collide(p, _sa.copy(p).setY(p.y + 1.2));           // a table top or couch seat overhead means we are inside it
   if (above && above.point.y < 1.5) return false;
   const below = collide(_sb.copy(p).setY(2.6), p);                   // anything between the ceiling and here means the same
-  if (below && below.point.y < 2.3 && below.point.y > p.y + radius) return false;
+  if (below && below.point.y < 2.05 && below.point.y > p.y + radius) return false;
   return lineOfSight(eye, p);
 }
 function openSpot(box, yMin, yMax, radius, eye, others = [], gap = 0) {
@@ -937,9 +941,9 @@ function waterMat(o = {}) {
         float rim = pow(1.0 - ndv, 2.6);                                                    // edges bend the most light
         vec3 l = normalize(vec3(0.3, 0.9, 0.45));
         float glint = pow(max(dot(reflect(-l, n), v), 0.0), 60.0) + 0.5 * pow(max(dot(reflect(-l, -n), v), 0.0), 40.0);
-        float caustic = smoothstep(0.56, 0.74, f) * 0.35;
+        float caustic = smoothstep(0.6, 0.78, f) * 0.22;
         vec3 col = mix(vec3(0.70, 0.84, 0.86), vec3(0.96, 0.99, 1.0), clamp(rim + caustic, 0.0, 1.0)) + glint;
-        float a = clamp(uBody + 0.62 * rim + caustic * 0.5 + glint, 0.0, 0.95) * uOpacity;
+        float a = clamp(uBody + 0.7 * rim + caustic * 0.45 + glint, 0.0, 0.95) * uOpacity;
         gl_FragColor = vec4(col, a);
       }`,
   });
@@ -948,7 +952,7 @@ function waterMat(o = {}) {
   return mat;
 }
 function energyMat(key, o = {}) {
-  if (key === 'aqua') return waterMat({ flow: o.flow, scale: o.scale, opacity: o.opacity, body: o.fadeY ? 0.1 : 0.16 });
+  if (key === 'aqua') return waterMat({ flow: o.flow, scale: o.scale, opacity: o.opacity, body: 0.07 });
   const P = ENERGY[key];
   const mat = new THREE.ShaderMaterial({
     uniforms: {
@@ -1214,7 +1218,7 @@ function boltMesh(key, m, color) {
   } else if (m.shape === 'blob') {
     // A fistful of water holding together in the air, pulled long by its own speed.
     const s = size || 0.085;
-    const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 24, 18), waterMat({ flow: [0, 0, -1.2], scale: [9, 9, 9], amp: s * 0.5, body: 0.2 }));
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 24, 18), waterMat({ flow: [0, 0, -1.2], scale: [9, 9, 9], amp: s * 0.5, body: 0.08 }));
     blob.geometry.scale(1, 1, 1.5);
     g.add(blob);
   } else if (m.shape === 'jet') {
@@ -2292,7 +2296,7 @@ const SOURCE_LIFE = 35, WATER_MAX = 3, WATER_FILL = 1.3;      // seconds a sourc
 function addSource(point, normal, t, life = SOURCE_LIFE) {
   if (sources.length >= 4) { const old = sources.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); old.mesh.material.dispose(); }
   const n = (normal || UP).clone().normalize();
-  const mesh = new THREE.Mesh(new THREE.CircleGeometry(0.42, 40, 0, Math.PI * 2), waterMat({ flow: [0.25, 0.2, 0], scale: [7, 7, 7], amp: 0, body: 0.3 }));
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(0.42, 40, 0, Math.PI * 2), waterMat({ flow: [0.25, 0.2, 0], scale: [7, 7, 7], amp: 0, body: 0.12 }));
   mesh.position.copy(point).addScaledVector(n, 0.015);
   mesh.lookAt(mesh.position.clone().add(n));
   mesh.scale.setScalar(0.05);
@@ -2309,7 +2313,7 @@ function clearSources() {
   sources.length = 0;
 }
 const water = { amount: 0, pos: new THREE.Vector3(), has: false };
-const waterBlob = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), waterMat({ flow: [0, 0.4, 0], scale: [3, 3, 3], amp: 0.16, body: 0.2 }));
+const waterBlob = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), waterMat({ flow: [0, 0.4, 0], scale: [3, 3, 3], amp: 0.16, body: 0.07 }));
 waterBlob.visible = false; waterBlob.renderOrder = 17;
 scene.add(waterBlob);
 const _ws = new THREE.Vector3(), _wv = new THREE.Vector3();
@@ -2345,7 +2349,7 @@ function updateWater(t, dt, anchor) {
   water.pos.lerp(anchor, Math.min(dt * 5, 1));      // it lags and swings behind the hand like something with weight
   waterBlob.visible = water.amount > 0.05;
   waterBlob.position.copy(water.pos);
-  waterBlob.scale.setScalar(0.035 + 0.035 * water.amount);
+  waterBlob.scale.setScalar(0.028 + 0.022 * water.amount);
 }
 
 // A whip of water: one long lash that sweeps across in front of you.
@@ -2410,7 +2414,7 @@ function makeWrap(key) {
       g.add(band);
     }
   } else {
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), waterMat({ flow: [0, 0.6, 0], scale: [3, 3, 3], amp: 0.1, body: 0.16 })));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), waterMat({ flow: [0, 0.6, 0], scale: [3, 3, 3], amp: 0.1, body: 0.05 })));
   }
   g.renderOrder = 17;
   scene.add(g);
@@ -3269,7 +3273,7 @@ if (navigator.xr && navigator.xr.isSessionSupported) {
     if (ok) {
       enterBtn.disabled = false;
       statusEl.textContent = 'Headset ready.';
-      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Do a move with both hands for a twin version. To hold something, reach an open hand at it and close your fist; open to let go.';
+      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Both hands together cast a twin. To hold something, reach an open hand at it and close your fist; open to let go. Creatures shoot back: block with a Rampart, blow shards back with Gust, or catch them.';
     } else {
       statusEl.textContent = 'No mixed reality here. Open this page in the Quest browser to play for real.';
     }

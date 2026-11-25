@@ -211,7 +211,7 @@ const MOVES = {
     lift:  { name: 'Sprout',      kind: 'column', launch: true, radius: 0.35, top: 0.1, bottom: 0.2, sides: 8 },
     sweep: { name: 'Vine Lash',   kind: 'whip',   range: 3.8, arc: 1.1 },
     slam:  { name: 'Overgrowth',  kind: 'ring',   maxR: 4, height: 1.2 },
-    point: { name: 'Seed',        kind: 'bolt',   speed: 9, radius: 0.25, shape: 'orb', size: 0.045, seed: true },
+    point: { name: 'Snapper Seed', kind: 'bolt',  speed: 9, radius: 0.25, shape: 'orb', size: 0.045, seed: true, turret: true },   // in a creature it sprouts; on any surface it grows a snapper
     grip:  { name: 'Vine Grip',   kind: 'grip' },
     charge: { name: 'Ironwood',   kind: 'bolt',   speed: 9, radius: 0.45, shape: 'orb', size: 0.12, damage: 3, entangle: 1.6, life: 2.5 },
   },
@@ -226,14 +226,14 @@ const MOVES = {
     charge: { name: 'Meteor Shower', kind: 'bolt', speed: 11, radius: 0.3, shape: 'orb', size: 0.06, blast: 0.8, sky: true, shower: 5, life: 2 },
   },
   morph: {
-    punch: { name: 'Ram Fist',    kind: 'cone',   range: 1.8, angle: 0.9, damage: 2, push: 6 },
+    punch: { name: 'Spear Hand',  kind: 'lance',  range: 2.8, damage: 2 },      // the arm itself goes out, through everything in line, and comes back
     shove: { name: 'Carapace',    kind: 'cone',   range: 1.4, angle: 1.2, damage: 1, push: 4, armour: 4 },
     lift:  { name: 'Spine',       kind: 'column', launch: true, radius: 0.3, top: 0.03, bottom: 0.16, sides: 5 },
     sweep: { name: 'Tail Whip',   kind: 'whip',   range: 2.6, arc: 1.4, damage: 2 },
     slam:  { name: 'Stomp',       kind: 'ring',   maxR: 3, height: 1.4, launch: true },
-    point: { name: 'Stinger',     kind: 'bolt',   speed: 20, radius: 0.18, shape: 'orb', size: 0.02, venom: true },
+    point: { name: 'Blood Needle', kind: 'bolt',  speed: 22, radius: 0.18, shape: 'needle', venom: true, blood: true },   // costs nothing; what it kills gives blood back
     grip:  { name: 'Grapple',     kind: 'grip' },
-    charge: { name: 'Titan Fist', kind: 'cone',   range: 2.4, angle: 1.1, damage: 3, push: 8, launch: true },
+    charge: { name: 'Rocket Fist', kind: 'bolt',  speed: 13, radius: 0.4, shape: 'fist', pierce: true, damage: 3, boomerang: true, life: 0.9 },   // the fist leaves, and comes home
   },
   umbra: {
     punch: { name: 'Shade Bolt',  kind: 'bolt',   speed: 10, radius: 0.25, shape: 'orb', size: 0.05 },
@@ -871,11 +871,12 @@ const colliderList = [];
 //   struck(dir, key, t): called when one of your own moves hits it.  damage(t): called when something hostile does.
 const barriers = [];
 const barrierMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+let barrierKey = null;                             // the discipline raising whatever is being raised right now
 function addBarrier(geometry, like, handlers) {
   const collider = new THREE.Mesh(geometry, barrierMat);
   collider.position.copy(like.position); collider.quaternion.copy(like.quaternion);
   collider.updateMatrixWorld(true);
-  const b = { collider, alive: true, hp: 3, ...handlers };
+  const b = { collider, alive: true, hp: 3, like, key: barrierKey, ...handlers };
   collider.userData.barrier = b;
   barriers.push(b);
   return b;
@@ -1215,6 +1216,7 @@ function hit(e, key, t, dir, m = {}) {
   }
   if (m.form === 'blast' && m.kind && m.kind !== 'bolt') explode(e.group.position.clone(), 'pyro', 0.7, t, 1, true);
   if (note) { hudNote = note; drawHud(); }
+  if (e.hp > 0 && m.blood) puff('morph', pos, 20, 2.5, { up: 1 });
   if (e.hp <= 0 && ((key === 'umbra' && m.hollow) || key === 'morph') && playerHP < 5) { playerHP++; hudNote = 'fed'; drawHud(); }   // the body, and the hollow dark, take back what they kill
   if (e.hp > 0) { e.flashT = t; tick(); puff(key, pos, 8, 1.6); return; }
 
@@ -1825,6 +1827,12 @@ function boltMesh(key, m, color) {
     const blob = new THREE.Mesh(new THREE.SphereGeometry(s, 24, 18), waterMat({ flow: [0, 0, -1.2], scale: [9, 9, 9], amp: s * 0.5, body: 0.08 }));
     blob.geometry.scale(1, 1, 1.5);
     g.add(blob);
+  } else if (m.shape === 'fist') {
+    const bone = new THREE.Mesh(craggy(new THREE.BoxGeometry(0.2, 0.18, 0.24, 2, 2, 2), 0.025), new THREE.MeshBasicMaterial({ color: 0xead2c4 }));
+    const flesh = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), energyMat('morph', { scale: [8, 8, 8], cut: 0.35 }));
+    g.add(bone, flesh);
+  } else if (m.shape === 'needle') {
+    g.add(new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.3, 6).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xc8102a })));
   } else if (m.shape === 'vortex') {
     // A ball of spinning air: three bands of wind turning inside each other.
     for (let i = 0; i < 3; i++) {
@@ -1895,6 +1903,9 @@ function castBolt(key, m, c) {
     if (m.form === 'steam') spawnCloud('steam', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
     if (m.splash) splash(point, t, m.splash);
     if (m.implode) implode(point, m.implode, t, m.damage || 1, key);
+    if (m.boomerang) castBolt(key, { ...m, boomerang: false, life: 1.2 }, { ...c, t, hand: point.clone(), dir: c.eye.clone().setY(c.eye.y - 0.3).sub(point).normalize(), scale: 1 });
+    if (m.turret) { plantTurret(point, stopNormal || UP, t); }
+    stopNormal = null;
     if (m.entangle) for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(point) < m.entangle) hit(e, 'flora', t, UP, { damage: 1 });
     if (key === 'aqua') quench(point, m.freeze ? 1.2 : 0.8, t);
     if (m.quake) quake(point, t, m.quake);
@@ -1928,7 +1939,7 @@ function castBolt(key, m, c) {
     if (wall && wall.object.userData.barrier && !c.hostile) {
       wall.object.userData.barrier.struck(dirN.copy(vel).normalize(), key, t);
       impact(wall.point, wall.normal, key, t, 0.3);
-      return stop(wall.point.clone(), t);
+      stopNormal = wall.normal.clone(); return stop(wall.point.clone(), t);
     }
     if (wall) {
       end = wall.point;
@@ -1971,7 +1982,7 @@ function castBolt(key, m, c) {
       if ((m.shape === 'rock' || m.shape === 'disc') && (o.def.burns || o.def.water)) destroyObject(o, t);
       if (!m.pierce) { impact(o.pos, dirN.clone().negate(), key, t, 0.25); return stop(o.pos.clone(), t); }
     }
-    if (end) { impact(wall.point, wall.normal, key, t, m.shape === 'rock' ? 0.4 : 0.25); return stop(wall.point.clone(), t); }
+    if (end) { impact(wall.point, wall.normal, key, t, m.shape === 'rock' ? 0.4 : 0.25); stopNormal = wall.normal.clone(); return stop(wall.point.clone(), t); }
 
     dirN.copy(vel).normalize();
     mesh.lookAt(look.copy(mesh.position).add(dirN));
@@ -2595,7 +2606,29 @@ function castVoid(key, m, c) {
   });
 }
 
-const KIND = { bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
+let stopNormal = null;
+// --- lance: not a projectile. The limb extends, runs everything in line through, and retracts.
+function castLance(key, m, c) {
+  const d = c.dir.clone().normalize(), t = c.t;
+  const wall = collide(c.hand, c.hand.clone().addScaledVector(d, m.range));
+  const reach = wall ? wall.point.distanceTo(c.hand) : m.range;
+  const tip = c.hand.clone().addScaledVector(d, reach);
+  const spear = new THREE.Group();
+  const bone = new THREE.Mesh(new THREE.ConeGeometry(0.035, 1, 6).rotateX(Math.PI / 2).translate(0, 0, 0.5), new THREE.MeshBasicMaterial({ color: 0xf0dccf }));
+  const sinew = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.045, 1, 8, 6).rotateX(Math.PI / 2).translate(0, 0, 0.5), energyMat('morph', { scale: [14, 14, 3], flow: [0, 0, 2], cut: 0.3 }));
+  sinew.scale.set(1, 1, 0.55);
+  spear.add(bone, sinew);
+  spear.position.copy(c.hand); spear.lookAt(tip);
+  for (const e of echoes) if (isLive(e, t) && segmentDistance(e.group.position, c.hand, tip) < 0.32) hit(e, key, t, d, m);
+  for (const o of objects) if (!o.dead && !o.held && !o.def.cloud && segmentDistance(o.pos, c.hand, tip) < o.def.r + 0.1) kick(o, d.x * 5, 1.5, d.z * 5);
+  if (wall) impact(wall.point, wall.normal, key, t, 0.25);
+  addEffect([spear], (n) => {
+    const a = n - t, k = a < 0.07 ? a / 0.07 : a < 0.2 ? 1 : Math.max(1 - (a - 0.2) / 0.16, 0);
+    spear.scale.set(1, 1, Math.max(reach * k, 0.01));
+    return a < 0.36;
+  });
+}
+const KIND = { lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
 
 // Both hands together: the same move, bigger and one point harder.
 function empowered(key, m, power) {
@@ -2614,9 +2647,32 @@ let hudNote = 'open palm toward you: pick';
 // Armour: for a few seconds, what is thrown at you breaks on you.
 let armourUntil = -1;
 function armour(t, seconds) { armourUntil = Math.max(armourUntil, t + seconds); play(SFX.guard); hudNote = 'armoured'; }
+// Anything standing that you made, you can move: an open-palm shove at your own wall slides it where you push.
+// It stays a wall. It hits what it passes through. (A punch still breaks it loose, the way it always did.)
+function shoveBarrier(key, c) {
+  const d = flat(c.dir, c.fwd);
+  const seen = collide(c.hand, c.hand.clone().addScaledVector(c.dir.clone().normalize(), 2.6));
+  const b = seen && seen.object.userData.barrier;
+  if (!b || !b.alive || b.key !== key || !b.like) return false;
+  const from = b.like.position.clone(), to = from.clone().addScaledVector(d, 1.6), t0 = c.t, struck = new Set();
+  thump(); play(SFX[key].shove);
+  addEffect([], (n) => {
+    if (!b.alive) return false;
+    const k = Math.min((n - t0) / 0.35, 1);
+    b.like.position.lerpVectors(from, to, k * (2 - k));
+    b.collider.position.copy(b.like.position); b.collider.updateMatrixWorld(true);
+    for (const e of echoes) if (!e.down && !struck.has(e) && Math.hypot(e.group.position.x - b.like.position.x, e.group.position.z - b.like.position.z) < 0.8) { struck.add(e); hit(e, key, n, d, { damage: 1, kind: 'wall' }); }
+    return k < 1;
+  });
+  hudNote = 'moved it'; lastCast = key; drawHud();
+  return true;
+}
 function cast(key, gesture, c) {
   let m = MOVES[key][gesture];
   if (!m) return;
+  if (gesture === 'shove' && c.hand && shoveBarrier(key, c)) return;
+  barrierKey = key;
+  if (c.st && key === 'lumen' && gesture === 'sweep') summonBlade(c.st, c.t);
   noteGesture(`${gesture} > ${m.name}`);
   if (m.kind === 'grip') return;                    // holds are driven by beginHold / updateHold, not cast here
   if (key === 'terra' && terraForm !== 'rock') {      // the same move, made of something else
@@ -3495,6 +3551,85 @@ function throwCharged(key, hand, dir, eye, fwd, charge, t) {
 }
 const throwFireball = (hand, dir, eye, fwd, charge, t) => throwCharged('pyro', hand, dir, eye, fwd, charge, t);
 
+// ---------- hand constructs ----------
+// Lumen's sweep leaves a blade of light in the hand that made it, for ten seconds. Swing it and it cuts; swing it fast
+// and it still throws its crescent; hold it in the way of a shard and the shard goes back.
+const blades = [];
+function summonBlade(st, t) {
+  let b = blades.find(x => x.st === st);
+  if (b) { b.until = t + 10; return b; }
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.012, 1, 6).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })));
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 1, 8, 8).translate(0, 0.5, 0), energyMat('lumen', { scale: [20, 4, 20], flow: [0, 2.5, 0], cut: 0.15 })));
+  g.renderOrder = 16; scene.add(g);
+  b = { st, g, until: t + 10, born: t, tip: new THREE.Vector3(), prev: new THREE.Vector3(), struck: new Map(), first: true };
+  blades.push(b);
+  play(SFX.lumen.lift); hudNote = 'blade of light'; lastCast = 'lumen';
+  return b;
+}
+const _bd = new THREE.Vector3();
+function updateBlades(t, dt) {
+  for (let i = blades.length - 1; i >= 0; i--) {
+    const b = blades[i], st = b.st;
+    if (t > b.until || selected !== 'lumen') { scene.remove(b.g); b.g.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); blades.splice(i, 1); continue; }
+    b.g.visible = !!st.valid;
+    if (!st.valid) continue;
+    _bd.copy(st.across).negate().normalize();          // out of the thumb side of the fist, the way a sword is held
+    const len = 0.95 * Math.min((t - b.born) / 0.15, 1) * Math.min((b.until - t) / 0.4, 1);
+    b.g.position.copy(st.palm);
+    b.g.quaternion.setFromUnitVectors(UP, _bd);
+    b.g.scale.set(1, Math.max(len, 0.01), 1);
+    b.tip.copy(st.palm).addScaledVector(_bd, len);
+    if (b.first) { b.prev.copy(b.tip); b.first = false; }
+    const speed = b.tip.distanceTo(b.prev) / Math.max(dt, 1e-3);
+    lightNow(b.tip, VOLT_LIGHT, 0.5);
+    if (speed > 1.6) {
+      _bd.subVectors(b.tip, b.prev).normalize();
+      for (const e of echoes) {
+        if (!isLive(e, t) || t - (b.struck.get(e) || -9) < 0.5) continue;
+        if (segmentDistance(e.group.position, st.palm, b.tip) > 0.3 && segmentDistance(e.group.position, b.prev, b.tip) > 0.3) continue;
+        b.struck.set(e, t);
+        tone(2093, 1568, 0.12, 0.12, 'triangle');
+        hit(e, 'lumen', t, _bd, { damage: 2, kind: 'whip', shadow: forms.lumen === 'shadow' });
+      }
+    }
+    for (const o of objects) if (!o.dead && o.hostile && segmentDistance(o.pos, st.palm, b.tip) < 0.3) { turn(o); sendBack(o, 11); tone(2637, 2637, 0.1, 0.1, 'triangle'); hudNote = 'parried'; lastCast = 'lumen'; drawHud(); }
+    b.prev.copy(b.tip);
+  }
+}
+// Umbra does not see things. It sees where things are not: every creature is a hole in the room, always, through anything.
+// No colour, no kind, no health. Just the absence.
+const voids = [];
+function updateVoids(t) {
+  const on = selected === 'umbra';
+  echoes.forEach((e, i) => {
+    let v = voids[i];
+    if (!on || e.down) { if (v) v.visible = false; return; }
+    if (!v) {
+      v = voids[i] = new THREE.Group();
+      const hole = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14), new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, depthWrite: false }));
+      const rim = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.235, 28), glowMat(new THREE.Color(0x9a3cff), 0.5));
+      hole.renderOrder = 18; rim.renderOrder = 19;
+      v.add(hole, rim); scene.add(v);
+    }
+    v.visible = true;
+    v.position.copy(e.group.position);
+    v.scale.setScalar((e.group.scale.x || 1) * (1 + 0.06 * Math.sin(t * 3 + i)));
+    v.children[1].lookAt(viewerPos);
+  });
+}
+// Water you have put on a ceiling rains: what stands under it is soaked.
+function rain(t) {
+  for (const sc of sources) {
+    if (sc.normal.y > -0.5) continue;
+    if (Math.random() < 0.6) particles.emit(_bd.copy(sc.pos).add(_np.set((Math.random() - 0.5) * 0.7, 0, (Math.random() - 0.5) * 0.7)), _nt.set(0, -2.5, 0), PCOL.aqua[1], 0.014, 0.9, 6, 0);
+    if (t - (sc.rainT || 0) < 0.7) continue;
+    sc.rainT = t;
+    for (const e of echoes) if (!e.down && e.group.position.y < sc.pos.y && Math.hypot(e.group.position.x - sc.pos.x, e.group.position.z - sc.pos.z) < 0.6) { e.soakedUntil = Math.max(e.soakedUntil, t + 4); reveal(e, t, 2, ELEMENTS.aqua.color); }
+    quench(sc.pos.clone().setY(0.2), 0.6, t);
+  }
+}
+
 // ---------- guard ----------
 // Forearms crossed in front of you: a shield in the colour of whatever you are bending. While it is up, nothing thrown
 // at you lands, and you cannot attack. What it does with a shard depends on the discipline.
@@ -3563,6 +3698,7 @@ const streamMats = {
   water: waterMat({ flow: [0, 3, 0], scale: [8, 3, 8], amp: 0, body: 0.3 }),
   ice: iceMat(),
   steam: waterMat({ flow: [0, 2, 0], scale: [5, 5, 5], amp: 0, body: 0.05 }),
+  flesh: energyMat('morph', { scale: [18, 18, 18], flow: [0, 0.6, 0], cut: 0.08 }),
 };
 const stream = {
   on: false, len: 1, latch: null, twoHand: false, span: 0, lastGrip: false, lastSqueeze: false, struck: new Map(),
@@ -3572,16 +3708,21 @@ const stream = {
   sheet: new THREE.Mesh(new THREE.BufferGeometry(), waterMat({ flow: [0, -1.4, 0], scale: [6, 3, 6], amp: 0, body: 0.12 })),
 };
 stream.sheet.material.side = THREE.DoubleSide;
+// The bone glaive on the end of Morph's tendril.
+stream.blade = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.34, 4).rotateX(Math.PI / 2).scale(0.35, 1, 1), new THREE.MeshBasicMaterial({ color: 0xf0dccf }));
+stream.blade.visible = false; scene.add(stream.blade);
+stream.key = 'aqua';
 for (const m of [stream.mesh, stream.sheet]) { m.visible = false; m.frustumCulled = false; m.renderOrder = 15; scene.add(m); }
 // What drives the stream this frame: { root, dir, vel, eye, grip, squeeze, end }. Hands fill it in; so does the preview.
 let streamCtl = null;
-const streamLength = () => Math.min(0.5 + 0.45 * water.amount, 2.6);
-function startStream(ctl, t) {
+const streamLength = () => stream.key === 'morph' ? 1.9 : Math.min(0.5 + 0.45 * water.amount, 2.6);
+function startStream(ctl, t, key = 'aqua') {
   if (stream.on) return true;
-  if (water.amount < 0.5) { hudNote = 'no water to draw out'; lastCast = 'aqua'; drawHud(); return false; }
+  stream.key = key;
+  if (key === 'aqua' && water.amount < 0.5) { hudNote = 'no water to draw out'; lastCast = 'aqua'; drawHud(); return false; }
   stream.on = true; stream.latch = null; stream.twoHand = false; stream.lastGrip = !!ctl.grip; stream.lastSqueeze = false;
   stream.struck.clear(); stream.seenT = t; stream.lastCtl = ctl;
-  const from = water.has ? water.pos : ctl.root;
+  const from = key === 'aqua' && water.has ? water.pos : ctl.root;
   // It starts bunched at the fingers and runs out to its length over the next half second.
   _sd.subVectors(from, ctl.root);
   if (_sd.lengthSq() < 1e-4) _sd.set(0, -1, 0);
@@ -3591,15 +3732,15 @@ function startStream(ctl, t) {
     n.prev.copy(n.p); n.last.copy(n.p);
   });
   stream.born = t;
-  play(SFX.aqua.draw); hudNote = 'stream'; lastCast = 'aqua'; drawHud();
+  play(SFX[key].draw); hudNote = key === 'morph' ? 'glaive' : 'stream'; lastCast = key; drawHud();
   return true;
 }
 function endStream(t, ctl) {
   if (!stream.on) return;
   if (stream.latch && ctl) flingLatched(ctl);
   stream.on = false; stream.latch = null; stream.twoHand = false; stream.owner = stream.endOwner = null;
-  stream.mesh.visible = stream.sheet.visible = false;
-  water.pos.copy(stream.nodes[0].p);
+  stream.mesh.visible = stream.sheet.visible = stream.blade.visible = false;
+  if (stream.key === 'aqua') water.pos.copy(stream.nodes[0].p);
 }
 const latchPos = () => stream.latch.e ? stream.latch.e.group.position : stream.latch.o.pos;
 function flingLatched(ctl) {
@@ -3618,14 +3759,15 @@ function updateStream(t, dt) {
   let ctl = streamCtl;
   if (ctl) { stream.seenT = t; stream.lastCtl = ctl; }
   else if (t - stream.seenT < 0.3) ctl = stream.lastCtl;           // a dropped frame of tracking does not spill it
-  if (!ctl || selected !== 'aqua' || water.amount < 0.3) { endStream(t, ctl); return; }
-  const form = forms.aqua, N = STREAM_N, nodes = stream.nodes, root = ctl.root;
+  const flesh = stream.key === 'morph', SK = stream.key;
+  if (!ctl || selected !== SK || (!flesh && water.amount < 0.3)) { endStream(t, ctl); return; }
+  const form = flesh ? 'flesh' : forms.aqua, N = STREAM_N, nodes = stream.nodes, root = ctl.root;
   const base = streamLength() * Math.min(0.15 + (t - stream.born) / 0.5, 1);
   if (stream.latch && (stream.latch.e ? stream.latch.e.down : (stream.latch.o.dead || stream.latch.o.held))) stream.latch = null;
 
   // The far end: free, in the other hand, or wrapped round something.
   const wasTwo = stream.twoHand;
-  stream.twoHand = !!ctl.end && !stream.latch;
+  stream.twoHand = !!ctl.end && !stream.latch && !flesh;
   if (wasTwo && !stream.twoHand && !stream.latch && stream.span > 0.5) { plantWall(nodes[0].p.clone(), nodes[N - 1].p.clone(), t); endStream(t, null); return; }
   const tipTarget = stream.latch ? latchPos() : stream.twoHand ? ctl.end : null;
   let len = base;
@@ -3636,7 +3778,7 @@ function updateStream(t, dt) {
 
   // Verlet rope: every node keeps its momentum, then the links pull it back into line.
   // Stepped at a fixed small interval so it swings the same at any frame rate.
-  const grav = form === 'ice' ? 0 : form === 'steam' ? -0.8 : 6;
+  const grav = form === 'ice' ? 0 : form === 'steam' ? -0.8 : flesh ? 2.5 : 6;
   const subs = Math.min(Math.max(Math.ceil(dt / 0.012), 1), 6), step = Math.min(dt, 0.08) / subs;
   for (const n of nodes) n.last.copy(n.p);
   const rootFrom = _sline.copy(nodes[0].p);
@@ -3668,7 +3810,8 @@ function updateStream(t, dt) {
   for (let i = 1; i < N; i++) if (nodes[i].p.y < 0.03) nodes[i].p.y = 0.03;
 
   // Lash: the outer part of the stream, moving fast, hits what it crosses.
-  const m = { name: 'Stream', kind: 'whip', damage: (water.amount >= 2 ? 2 : 1) + (form === 'ice' ? 1 : 0), freeze: form === 'ice', steam: form === 'steam', form: form === 'water' ? undefined : form };
+  const m = flesh ? { name: 'Glaive', kind: 'whip', damage: 2, venom: forms.morph === 'venom' }
+    : { name: 'Stream', kind: 'whip', damage: (water.amount >= 2 ? 2 : 1) + (form === 'ice' ? 1 : 0), freeze: form === 'ice', steam: form === 'steam', form: form === 'water' ? undefined : form };
   const lash = form === 'water' ? LASH_SPEED : 2;
   if (!stream.twoHand) for (let i = Math.floor(N / 3); i < N; i++) {
     const n = nodes[i];
@@ -3679,8 +3822,8 @@ function updateStream(t, dt) {
       if (!isLive(e, t) || (stream.latch && stream.latch.e === e) || t - (stream.struck.get(e) || -9) < 0.6) continue;
       if (segmentDistance(e.group.position, n.last, n.p) > 0.32 && segmentDistance(e.group.position, nodes[i - 1].p, n.p) > 0.3) continue;   // swept, so a fast tip cannot skip past
       stream.struck.set(e, t);
-      puff('aqua', n.p, 16, 2.2, {});
-      hit(e, 'aqua', t, _sv, m);
+      puff(SK, n.p, 16, 2.2, {});
+      hit(e, SK, t, _sv, m);
     }
     for (const o of objects) {
       if (o.dead || o.held || o.def.cloud || (stream.latch && stream.latch.o === o) || t - (stream.struck.get(o) || -9) < 0.4) continue;
@@ -3704,10 +3847,10 @@ function updateStream(t, dt) {
     if (best) {
       stream.latch = best;
       stream.tether = Math.max(latchPos().distanceTo(root) * 0.9, 0.4);     // it goes taut at the distance you caught it
-      play(SFX.aqua.latch); hudNote = 'took hold'; lastCast = 'aqua'; drawHud();
-      puff('aqua', latchPos(), 24, 1.8, {});
+      play(SFX.aqua.latch); hudNote = flesh ? 'hooked' : 'took hold'; lastCast = SK; drawHud();
+      puff(SK, latchPos(), 24, 1.8, {});
       if (best.e) {
-        if (form === 'ice') { best.e.frozenUntil = t + 6; best.e.vel.set(0, best.e.vel.y, 0); }
+        if (flesh) { /* a hook, not a soaking */ } else if (form === 'ice') { best.e.frozenUntil = t + 6; best.e.vel.set(0, best.e.vel.y, 0); }
         else if (form === 'steam') best.e.blindUntil = t + 2;
         else best.e.soakedUntil = t + 6;
       } else turn(best.o);
@@ -3727,7 +3870,7 @@ function updateStream(t, dt) {
       if (ctl.vel.y > 1.6 && !e.airborne && !(e.frozenUntil > t)) { e.airborne = true; e.vel.y = 2.2; }
       e.blindUntil = Math.max(e.blindUntil, t + 0.3);
       e.revealedUntil = Math.max(e.revealedUntil, t + 1);
-      if (ctl.squeeze && !stream.lastSqueeze) { hudNote = 'constrict'; hit(e, 'aqua', t, ZERO, { damage: 1, kind: 'grip', freeze: form === 'ice' }); }
+      if (ctl.squeeze && !stream.lastSqueeze) { hudNote = 'constrict'; hit(e, SK, t, ZERO, { damage: 1, kind: 'grip', freeze: form === 'ice' }); }
     } else {                                       // an object: a weight on the end of a rope
       const o = stream.latch.o;
       o.vel.addScaledVector(_sd, over * 60 * dt);
@@ -3766,8 +3909,10 @@ function updateStream(t, dt) {
   const mesh = stream.mesh;
   mesh.visible = true;
   mesh.material = streamMats[form];
+  stream.blade.visible = flesh;
+  if (flesh) { stream.blade.position.copy(nodes[N - 1].p); stream.blade.lookAt(_sa2.copy(nodes[N - 1].p).multiplyScalar(2).sub(nodes[N - 3].p)); }
   mesh.geometry.dispose();
-  const radius = form === 'ice' ? 0.02 : 0.012 + 0.006 * Math.min(water.amount, 4);
+  const radius = form === 'ice' ? 0.02 : flesh ? 0.016 : 0.012 + 0.006 * Math.min(water.amount, 4);
   mesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(nodes.map(n => n.p)), 34, radius, 7, false);
   if (form === 'steam') { if (Math.random() < 0.6) fume(STEAM, nodes[Math.floor(Math.random() * N)].p, 1, { size: 0.14, life: 0.7, rise: 0.3 }); }
   else if (form === 'water' && Math.random() < 0.3) particles.emit(nodes[1 + Math.floor(Math.random() * (N - 1))].p, _sv.set(0, -0.2, 0), PCOL.aqua[1], 0.014, 0.5, 5, 0);
@@ -3827,6 +3972,7 @@ function plantWall(a, b, t) {
     damage: (tt) => { puff('aqua', centre(), 14, 2, { jitter: width * 0.4 }); if (--barrier.hp <= 0) fall(tt); },
   });
   barrier.hp = form === 'ice' ? 4 : 2;
+  barrier.key = 'aqua';
   const until = t + (form === 'ice' ? 20 : 12);
   addEffect([wall], (n) => {
     wall.scale.y = Math.min((n - t) / 0.2, 1);
@@ -3840,7 +3986,7 @@ function plantWall(a, b, t) {
 
 // --- drawn lines ---
 const DRAW_STEP = 0.12, DRAW_MAX = 28;
-const DRAWN = { terra: 'Ridge', pyro: 'Fire Line', aqua: 'Stream', aero: 'Current', lumen: 'Mirror Line', gravis: 'Rift', flora: 'Snare', astra: 'Constellation', morph: 'Bone Ridge', umbra: 'Veil' };   // what a pinch makes
+const DRAWN = { terra: 'Ridge', pyro: 'Fire Line', aqua: 'Stream', aero: 'Current', lumen: 'Mirror Line', gravis: 'Rift', flora: 'Snare', astra: 'Constellation', morph: 'Glaive', umbra: 'Veil' };   // what a pinch makes
 let drawing = null;                                 // { key, pts, owner }
 function drawBegin(key, p, owner = null) { drawing = { key, pts: [p.clone()], owner }; noteGesture('pinch'); }
 function drawAdd(p) {
@@ -4083,6 +4229,57 @@ function rift(pts, t) {
   return { form, until };
 }
 
+// --- Flora: snappers. A plant with a mouth, rooted to whatever surface the seed hit: floor, wall or ceiling.
+// It bites what comes close, spits thorns at what does not, and eats what is thrown past it. Three at a time.
+const turrets = [];
+function plantTurret(point, normal, t) {
+  if (turrets.length >= 3) turrets[0].until = 0;
+  const g = new THREE.Group();
+  g.position.copy(point);
+  g.quaternion.setFromUnitVectors(UP, normal.clone().normalize());
+  const green = new THREE.MeshBasicMaterial({ color: 0x3d8a22 }), lip = new THREE.MeshBasicMaterial({ color: 0x7fd65a }), maw = new THREE.MeshBasicMaterial({ color: 0xc8204a, side: THREE.DoubleSide });
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.035, 0.34, 6).translate(0, 0.17, 0), green);
+  for (let i = 0; i < 4; i++) { const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 4).rotateZ(Math.PI / 2).translate(0.09, 0.02, 0), lip); leaf.rotation.y = i * Math.PI / 2; g.add(leaf); }
+  const head = new THREE.Group();
+  head.position.set(0, 0.36, 0);
+  const jaws = [1, -1].map((side) => {
+    const jaw = new THREE.Group();
+    jaw.add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.6, 1.5).rotateX(side > 0 ? 0 : Math.PI), lip));
+    jaw.add(new THREE.Mesh(new THREE.CircleGeometry(0.085, 10).rotateX(Math.PI / 2).scale(1, 1, 1.5), maw));
+    for (let k = 0; k < 5; k++) { const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.03, 4).rotateX(side > 0 ? Math.PI : 0), new THREE.MeshBasicMaterial({ color: 0xfff6d8 })); tooth.position.set((k - 2) * 0.03, -side * 0.012, 0.1 - Math.abs(k - 2) * 0.02); jaw.add(tooth); }
+    head.add(jaw);
+    return jaw;
+  });
+  g.add(stalk, head);
+  g.scale.setScalar(0.01);
+  const self = { g, head, pos: point.clone().addScaledVector(normal, 0.36), until: t + 25, biteAt: 0, spitAt: t + 0.8, snap: -9 };
+  turrets.push(self);
+  const epoch = shapeEpoch, look = new THREE.Vector3();
+  play(SFX.flora.lift); puff('flora', point, 24, 1.8, { dir: normal, spread: 0.7 });
+  hudNote = 'snapper'; lastCast = 'flora'; drawHud();
+  addEffect([g], (n) => {
+    if (epoch !== shapeEpoch || n > self.until) { turrets.splice(turrets.indexOf(self), 1); puff('flora', self.pos, 20, 1.6, {}); return false; }
+    g.scale.setScalar(Math.min((n - t) / 0.4, 1) * 1.4);
+    let prey = null, near = 5;
+    for (const e of echoes) { if (e.down) continue; const d = e.group.position.distanceTo(self.pos); if (d < near && lineOfSight(self.pos, e.group.position)) { near = d; prey = e; } }
+    const open = n - self.snap < 0.25 ? 0.05 : prey ? 0.5 + 0.2 * Math.sin(n * 9) : 0.12 + 0.08 * Math.sin(n * 2);
+    jaws[0].rotation.x = -open; jaws[1].rotation.x = open;
+    if (prey) {
+      head.lookAt(look.copy(prey.group.position));
+      reveal(prey, n, 1.5, ELEMENTS.flora.color);
+      look.copy(prey.group.position).sub(self.pos).normalize();
+      if (near < 1.1 && n > self.biteAt) { self.biteAt = n + 1.2; self.snap = n; play(SFX.morph.lift); hit(prey, 'flora', n, look, { damage: 1 }); }
+      else if (near >= 1.1 && n > self.spitAt) {
+        self.spitAt = n + 1.6; self.snap = n;
+        tone(700, 300, 0.08, 0.1, 'triangle');
+        castBolt('flora', { name: 'Thorn', kind: 'bolt', speed: 12, radius: 0.2, shape: 'orb', size: 0.02, bleed: forms.flora === 'thorn', spore: forms.flora === 'spore', life: 1 }, { hand: self.pos.clone().addScaledVector(look, 0.15), dir: look.clone(), eye: viewerPos.clone(), fwd: look.clone(), t: n, scale: 1 });
+      }
+    }
+    for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.7) { o.dead = true; self.snap = n; play(SFX.morph.lift); puff('flora', o.pos, 12, 1.6, {}); }   // it eats what flies past
+    return true;
+  });
+  return self;
+}
 // --- Flora: a line of roots that catches what crosses it ---
 function snare(pts, t) {
   pts = pts.map(p => p.clone());
@@ -4170,7 +4367,7 @@ function raiseRidge(pts, t, as = null) {
       reflect: form === 'metal',
       damage: () => { puff('terra', mid.copy(g.position).setY(g.position.y + height * 0.6), 10, 2, {}); if (--part.barrier.hp <= 0) crumble(); },
     });
-    part.barrier.hp = form === 'metal' ? 6 : 3;
+    part.barrier.hp = form === 'metal' ? 6 : 3; part.barrier.key = as ? 'morph' : 'terra';
     part.crumble = crumble;
     parts.push(part); groups.push(g);
     puff('terra', g.position, 16, 2, { up: 2, jitter: len * 0.4 });
@@ -4659,7 +4856,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 9. open palm toward you: pick'; drawHud(); }
+  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 10. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;
@@ -4767,8 +4964,8 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     }
     st.prevOtherFist = otherFist;
     if (near || t - st.clapBlock < 0.4) continue;
-    // Shaping. Aqua: a pinch draws the carried water out into a stream. The others trace a line.
-    if (selected === 'aqua') {
+    // Shaping. Aqua: a pinch draws the carried water out into a stream. Morph: a bladed tendril. The others trace a line.
+    if (selected === 'aqua' || selected === 'morph') {
       if (stream.on && stream.endOwner === st) {     // this hand has the far end
         if (!st.pinch) stream.endOwner = null;
         st.ready = false; st.charge = 0;
@@ -4785,7 +4982,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
       if (!stream.on && st.pinch && !st.wasPinch) {
         noteGesture('pinch');
         streamCtl = { root: st.pinchPos, dir: reachDir, vel: st.vel, eye: viewerPos, grip: false, squeeze: false, end: null };
-        if (startStream(streamCtl, t)) { stream.owner = st; st.ready = false; st.wasPinch = true; continue; }
+        if (startStream(streamCtl, t, selected)) { stream.owner = st; st.ready = false; st.wasPinch = true; continue; }
       }
     } else if (st.pinch) {
       if (!drawing) drawBegin(selected, st.pinchPos, st);
@@ -4827,7 +5024,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
       if (gesture) {
         st.ready = false;
         st.lastCast = t;
-        const c = { eye: viewerPos.clone(), fwd: _fwd.clone(), t };
+        const c = { eye: viewerPos.clone(), fwd: _fwd.clone(), t, st };
         if (gesture === 'punch') { c.hand = st.knuckle.clone(); c.dir = st.vel.clone(); }
         else if (gesture === 'shove') { c.hand = st.palm.clone(); c.dir = st.normal.clone(); }
         else if (gesture === 'point') { c.hand = st.indexTip.clone(); c.dir = st.pointDir.clone(); }
@@ -4933,10 +5130,10 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   if (previewGesture === 'draw') {                 // press and drag: the pointer is the pinch
     previewAim.copy(aim);
     previewDraw.down = true;
-    if (selected === 'aqua') {
+    if (selected === 'aqua' || selected === 'morph') {
       previewDraw.ctl = { root: previewPinch(new THREE.Vector3()), dir: aim.clone(), vel: new THREE.Vector3(), eye: eye.clone(), grip: false, squeeze: false, end: null };
       streamCtl = previewDraw.ctl;
-      if (!startStream(streamCtl, t)) { streamCtl = previewDraw.ctl = null; }
+      if (!startStream(streamCtl, t, selected)) { streamCtl = previewDraw.ctl = null; }
     } else drawBegin(selected, previewPinch(new THREE.Vector3()));
     return;
   }
@@ -4956,7 +5153,7 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
     if (selected !== 'aero') { hudNote = ELEMENTS[selected].sense.toLowerCase(); drawHud(); }
     return;
   }
-  const c = { hand, dir, eye, fwd, t, power: ev.shiftKey ? 1.6 : 1 };
+  const c = { hand, dir, eye, fwd, t, power: ev.shiftKey ? 1.6 : 1, st: previewHand };
   if (previewGesture === 'lift' || previewGesture === 'sweep') c.dir = aimPoint.clone().sub(eye).normalize();
   if (previewGesture === 'slam') {
     c.ground = eye.clone().addScaledVector(fwd, 1.1).setY(0);
@@ -4969,9 +5166,10 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
 const previewGrip = { hold: null, chargeFrom: -1, squeeze: false, prevSqueeze: false };
 const previewAim = new THREE.Vector3(0, 0, -1);
 const previewDraw = { down: false, ctl: null };
+const previewHand = { valid: true, palm: new THREE.Vector3(), across: new THREE.Vector3(1, 0, 0) };
 // Where the pinch is in the preview: on the surface under the pointer for fire and stone, out in the air for wind and water.
 function previewPinch(out) {
-  if (selected === 'aqua') return out.copy(camera.position).addScaledVector(previewAim, 0.9);
+  if (selected === 'aqua' || selected === 'morph') return out.copy(camera.position).addScaledVector(previewAim, 0.9);
   if (selected === 'aero') return out.copy(camera.position).addScaledVector(previewAim, 2.2);
   const far = collide(camera.position, _cp.copy(camera.position).addScaledVector(previewAim, 8));
   return far ? out.copy(far.point).addScaledVector(far.normal, 0.2) : out.copy(camera.position).addScaledVector(previewAim, 3);
@@ -5132,6 +5330,8 @@ renderer.setAnimationLoop((ms, frame) => {
     camera.lookAt(0, 0.9, 0);
     viewerPos.copy(camera.position);
     if (!demoFired && t > 1.2) { demoFired = true; firePulse(new THREE.Vector3(-0.9, 0.74, -0.6)); }
+    previewHand.palm.copy(camera.position).add(_off.set(0.25, -0.2, -0.5).applyQuaternion(camera.quaternion)).addScaledVector(previewAim, 0.25);
+    previewHand.across.set(-previewAim.x * 0.6, -1, -previewAim.z * 0.6).normalize();
     if (previewDraw.down) {
       if (previewDraw.ctl) {
         const c = previewDraw.ctl;
@@ -5175,6 +5375,9 @@ renderer.setAnimationLoop((ms, frame) => {
     if (live && !depthSeen) { depthSeen = true; hudNote = 'live depth on: hands hide things'; drawHud(); }
   }
   updateGuard(t, dt);
+  updateBlades(t, dt);
+  updateVoids(t);
+  rain(t);
   updateStream(t, dt);
   updateCurrents(t, dt, viewerPos);
   if (waterBoost && selected === 'aqua') { waterAnchorOn = true; waterAnchor.copy(waterBoost).add(_off.set(0, 0.1, 0)); }
@@ -5199,7 +5402,7 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
-  mirrorLine, rift, implode, ELEMENT_ORDER, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
+  mirrorLine, rift, implode, ELEMENT_ORDER, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
   stream, startStream, endStream, plantWall, currents, makeCurrent, bendCurrents, fireLine, raiseRidge, drawBegin, drawAdd, drawEnd,
   get streamCtl() { return streamCtl; }, set streamCtl(v) { streamCtl = v; if (!v) stream.seenT = -9; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, throwCharged, kick,

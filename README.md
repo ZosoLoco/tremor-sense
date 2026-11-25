@@ -180,3 +180,18 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
   carried, Aqua bolts, cones and whips leave straight from the nearest source you can see.
 - **Creatures.** Crawlers (floor, fast), flyers (near the ceiling), brutes (6 health, cannot be tossed, from wave 2),
   shades (weak to light), frost (weak to fire, invisible to Chi).
+
+## Build 10: constructs and stranger abilities
+
+- **Morph.** Spear Hand (punch): the arm itself extends up to 2.8 m through everything in line and retracts.
+  Glaive (pinch): a bladed tendril grows from the hand; it lashes, hooks creatures and objects on a closed fist, and
+  needs no water. Rocket Fist (charged): the fist flies out and comes back. Blood Needle (point).
+- **Flora.** Snapper Seed (point): on any surface (floor, wall, ceiling) the seed grows a snapper that bites what is
+  close, spits thorns at what is not, and eats shards. Three at a time, 25 seconds each.
+- **Lumen.** A sweep leaves a blade of light in that hand for ten seconds. It cuts when swung, parries shards, and
+  each sweep still throws a crescent.
+- **Umbra.** Void sight, always on: every creature shows as a black hole in the room, through anything, with no
+  colour or kind. Holding the fist still hides you.
+- **Your constructs move.** An open-palm shove at a wall you raised (in the same discipline) slides it 1.6 m and hits
+  what it passes through. A punch still breaks it loose.
+- **Ceilings.** Water sources on a ceiling rain: what stands under them is soaked and fires below go out.

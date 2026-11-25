@@ -152,3 +152,31 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
 - The palm menu has a second row of orbs, toward the fingers, for the new two. Keys 5 and 6 in the preview.
 - **Sound.** Every move has its own synthesised sound in its discipline's voice, sub-elements add a layer, and
   everything runs through one compressor.
+
+## Build 8
+
+- **Fixed:** poking Lumen or Gravis on the palm menu flipped a switch instead. The menu now has three rows of orbs
+  (4, 4, 2) above the switches.
+- **Live depth occlusion.** The session asks for the headset's depth sensor. When it is granted, hands, arms, body and
+  anything else real hide what is behind them. `OCCL` turns all occlusion off.
+- **Four more disciplines** (ten in all), each with seven moves, a charged move, a drawn line, a sense, three forms and
+  its own voice:
+  - **Flora** roots what it hits. Thorn, Bramble (a standing wall), Sprout, Vine Lash, Overgrowth, Seed, Vine Grip,
+    Ironwood, Snare. Forms vine, thorn, spore. Root Sense: palm on a surface.
+  - **Astra** comes down from above the target. Comet, Downburst, Moonrise, Aurora, Starfall, Sunbeam, Meteor Shower,
+    Constellation. Forms day, night, storm. Zenith Sense: raised open palm, shows what has open air above it.
+  - **Morph** is close range and armoured. Ram Fist, Carapace (armour), Spine, Tail Whip, Stomp, Stinger, Grapple,
+    Titan Fist, Bone Ridge. Kills heal you. Forms beast, shell, venom. Pulse Sense: raised fist.
+  - **Umbra** blinds and drains. Shade Bolt, Eclipse, Pit, Scythe, Nightfall, Hex, Black Sun, Veil. Forms shade, fear,
+    hollow. Dark Sense: raised fist; while held, nothing can see you.
+- **Reactions.** Water or ice puts out burning objects, cools molten stone and kills a fire line in steam. Fire melts an
+  ice wall into a water source. Fire on rooted creatures does extra and burns the roots off; water on them doubles
+  the root; water on a snare makes it last longer; a fire line burns a snare. Light on a blinded creature does +2.
+  A Morph hit shatters frozen creatures. Storm soaks then conducts. Chi cannot see frost creatures or ice.
+- **Guard.** Cross your forearms in front of your chest: a shield in the current discipline. Nothing thrown lands while
+  it is up. Aero, Lumen, Gravis and steel throw shards back; Aqua swallows them as water; Pyro burns the thrower;
+  Flora roots the thrower. (`G` in the preview.)
+- **Water.** The carried water floats in front of your chest (capacity 4) so either hand can use it. With nothing
+  carried, Aqua bolts, cones and whips leave straight from the nearest source you can see.
+- **Creatures.** Crawlers (floor, fast), flyers (near the ceiling), brutes (6 health, cannot be tossed, from wave 2),
+  shades (weak to light), frost (weak to fire, invisible to Chi).

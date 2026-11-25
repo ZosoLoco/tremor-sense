@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tremor Sense</title>
+<style>
+  :root { --acid: #b6ff3c; --ink: #050705; --chrome: #cfd6d2; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--ink); color: var(--chrome);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #ui { position: fixed; left: 0; right: 0; bottom: 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 12px; align-items: flex-start; pointer-events: none;
+    background: linear-gradient(to top, rgba(5,7,5,.92), rgba(5,7,5,0)); }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .18em; text-transform: uppercase; color: var(--acid);
+    text-shadow: 0 0 18px rgba(182,255,60,.45); }
+  p { margin: 0; max-width: 46ch; font-size: 13px; line-height: 1.5; color: #9aa59f; }
+  #status { color: var(--chrome); }
+  button { pointer-events: auto; font: inherit; font-size: 15px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 14px 22px; border-radius: 999px; border: 1px solid #5d6661; color: var(--ink); cursor: pointer;
+    background: linear-gradient(180deg, #f2ffd9 0%, var(--acid) 45%, #6fae12 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 0 24px rgba(182,255,60,.35); }
+  button:active { transform: translateY(1px) scale(.98); }
+  button[disabled] { filter: grayscale(1) brightness(.6); cursor: default; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="ui">
+  <h1>Tremor Sense</h1>
+  <p id="status">Checking for a headset…</p>
+  <p id="hint">Preview mode: click or tap any surface to send a pulse. Glowing echoes hide in the room; a pulse reveals them, a second tap catches them.</p>
+  <button id="enter" disabled>Enter mixed reality</button>
+</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

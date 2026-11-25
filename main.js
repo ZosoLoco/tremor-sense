@@ -3,11 +3,19 @@
 // Pick a discipline (look at an open palm, poke an orb with the other index finger),
 // then use the same six hand verbs. Each discipline answers them differently.
 //
-//            SENSE                  PUNCH        SHOVE        LIFT     SWEEP      SLAM (fist on a surface)
-//   TERRA    palm on a surface      Stone Shot   Boulder      Spire    Rampart    Fault Line
-//   PYRO     raised fist, held      Ember        Flame Burst  Pyre     Fire Arc   Eruption
-//   AQUA     raised palm, held      Jet          Breaker      Geyser   Riptide    Surge
-//   AERO     clap                   Air Bullet   Gust         Updraft  Air Blade  Shockwave
+//            SENSE                  PUNCH        SHOVE        LIFT     SWEEP      SLAM (fist on surface)  POINT (index finger jab)
+//   TERRA    palm on a surface      Stone Shot   Boulder      Spire    Rampart    Fault Line              Ferro Disc
+//   PYRO     raised fist, held      Ember        Flame Burst  Pyre     Fire Arc   Eruption                Volt
+//   AQUA     raised palm, held      Jet          Breaker      Geyser   Riptide    Surge                   Frost Needle
+//   AERO     clap                   Air Bullet   Gust         Updraft  Air Blade  Shockwave               Void
+//
+// Both hands making the same move together cast a stronger "twin" version.
+//
+// Echoes take two hits, and the disciplines leave different marks on them:
+//   Pyro burns (a second hit lands by itself 1.5 s later). Aqua soaks. Frost freezes in place.
+//   Terra hits twice as hard. Aero shoves things around. Lifts and Surge toss echoes into the air.
+// Marks combine: Volt on a soaked echo conducts and chains. Terra on a frozen one shatters it and
+// hurts its neighbours. Aero on an airborne one finishes it. Fire on water just makes steam.
 //
 // Projectiles collide with the real room. Columns, rings and Terra's ripple do not.
 
@@ -33,6 +41,7 @@ const REARM_SPEED = 0.5;    // hand must slow below this between attacks
 const CAST_COOLDOWN = 0.45; // seconds
 const HOLD_STILL = 0.25;    // a held sense needs the hand slower than this (m/s)
 const HOLD_TIME = 0.4;      // ...for this long (s)
+const POINT_SPEED = 1.0;    // index finger jab, moving the way it points
 const CLAP_ON = 0.09;       // palms closer than this = clap
 const CLAP_OFF = 0.18;
 const AQUA_SENSE = { range: 8, angle: 0.3 };   // a narrow beam you sweep around, passes through walls
@@ -47,37 +56,41 @@ const ELEMENTS = {
   aero:  { label: 'AERO',  sense: 'Draft Sense',  color: new THREE.Color(0xdff9ff) },
 };
 const ELEMENT_ORDER = ['pyro', 'aqua', 'terra', 'aero'];
-const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam'];
+const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point'];
 
 // What each verb does per discipline. kind picks the behaviour, the rest are its numbers.
 const MOVES = {
   pyro: {
     punch: { name: 'Ember',       kind: 'bolt',   speed: 9,  radius: 0.22, shape: 'orb' },
     shove: { name: 'Flame Burst', kind: 'cone',   range: 2.6, angle: 0.75 },
-    lift:  { name: 'Pyre',        kind: 'column', radius: 0.35, top: 0.16, bottom: 0.2, sides: 12, flicker: true },
+    lift:  { name: 'Pyre',        kind: 'column', launch: true, radius: 0.35, top: 0.16, bottom: 0.2, sides: 12, flicker: true },
     sweep: { name: 'Fire Arc',    kind: 'bolt',   speed: 6,  radius: 0.5, shape: 'crescent', size: 0.5, pierce: true, life: 1.2 },
     slam:  { name: 'Eruption',    kind: 'ring',   maxR: 2.2, height: 1.2 },
+    point: { name: 'Volt',        kind: 'beam',   range: 8, chain: 2, volt: true },
   },
   aqua: {
     punch: { name: 'Jet',         kind: 'bolt',   speed: 12, radius: 0.18, shape: 'jet', pierce: true },
     shove: { name: 'Breaker',     kind: 'wall',   ram: 3.5, width: 1.8, height: 1.1, passThrough: true },
-    lift:  { name: 'Geyser',      kind: 'column', radius: 0.32, top: 0.1, bottom: 0.1, sides: 16 },
+    lift:  { name: 'Geyser',      kind: 'column', launch: true, radius: 0.32, top: 0.1, bottom: 0.1, sides: 16 },
     sweep: { name: 'Riptide',     kind: 'bolt',   speed: 5,  radius: 0.22, shape: 'crescent', size: 0.16, pierce: true, homing: 7, life: 2.6 },
-    slam:  { name: 'Surge',       kind: 'ring',   maxR: 2.6, height: 0.9 },
+    slam:  { name: 'Surge',       kind: 'ring',   maxR: 2.6, height: 0.9, launch: true },
+    point: { name: 'Frost Needle', kind: 'bolt',  speed: 14, radius: 0.2, shape: 'shard', freeze: true },
   },
   terra: {
     punch: { name: 'Stone Shot',  kind: 'bolt',   speed: 8,  radius: 0.28, shape: 'rock', gravity: 2.5 },
     shove: { name: 'Boulder',     kind: 'bolt',   speed: 3.5, radius: 0.5, shape: 'rock', size: 0.28, roll: true, pierce: true, life: 3 },
-    lift:  { name: 'Spire',       kind: 'column', radius: 0.3, top: 0.03, bottom: 0.17, sides: 6, pulse: true },
+    lift:  { name: 'Spire',       kind: 'column', launch: true, radius: 0.3, top: 0.03, bottom: 0.17, sides: 6, pulse: true },
     sweep: { name: 'Rampart',     kind: 'wall',   ram: 2.5, width: 1.6, height: 1.4 },
     slam:  { name: 'Fault Line',  kind: 'fault',  length: 4.5 },
+    point: { name: 'Ferro Disc',  kind: 'bolt',   speed: 10, radius: 0.25, shape: 'disc', bounces: 3, pierce: true, life: 2.5 },
   },
   aero: {
     punch: { name: 'Air Bullet',  kind: 'bolt',   speed: 16, radius: 0.2, shape: 'orb', size: 0.03, bounces: 2 },
     shove: { name: 'Gust',        kind: 'cone',   range: 4.5, angle: 0.5 },
-    lift:  { name: 'Updraft',     kind: 'column', radius: 0.5, top: 0.3, bottom: 0.22, sides: 20 },
+    lift:  { name: 'Updraft',     kind: 'column', launch: true, radius: 0.5, top: 0.3, bottom: 0.22, sides: 20 },
     sweep: { name: 'Air Blade',   kind: 'bolt',   speed: 11, radius: 0.4, shape: 'crescent', size: 0.4, pierce: true },
     slam:  { name: 'Shockwave',   kind: 'ring',   maxR: 3, height: 2 },
+    point: { name: 'Void',        kind: 'void',   radius: 1.3, range: 6 },
   },
 };
 
@@ -432,20 +445,25 @@ function glowMat(color, opacity = 0) {
   });
 }
 
+const ICE = new THREE.Color(0xbfeeff);
 function makeEcho() {
   const g = new THREE.Group();
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), glowMat(ACID));
   const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.085, 0), glowMat(ACID));
   shell.material.wireframe = true;
   const halo = new THREE.Mesh(new THREE.RingGeometry(0.11, 0.118, 40), glowMat(ACID));
-  g.add(core, shell, halo);
+  const ice = new THREE.Mesh(new THREE.IcosahedronGeometry(0.125, 0), glowMat(ICE, 0.32));
+  ice.visible = false;
+  g.add(core, shell, halo, ice);
   g.renderOrder = 10;
   g.visible = false;
   echoGroup.add(g);
   return {
-    group: g, core, shell, halo, parts: [core, shell, halo],
+    group: g, core, shell, halo, ice, parts: [core, shell, halo],
     home: new THREE.Vector3(), phase: Math.random() * 6.28,
     revealedUntil: -1, level: 0, down: false, downT: -1, push: new THREE.Vector3(),
+    hp: 2, restY: 0, vel: new THREE.Vector3(), airborne: false, flashT: -1,
+    burnAt: -1, soakedUntil: -1, frozenUntil: -1, baseColor: new THREE.Color(ACID),
   };
 }
 for (let i = 0; i < ECHO_COUNT; i++) echoes.push(makeEcho());
@@ -478,6 +496,9 @@ function scatterEchoes() {
       THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()),
     );
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;
+    e.hp = 2; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
+    e.burnAt = e.soakedUntil = e.frozenUntil = -1;
+    e.baseColor.copy(ACID); e.ice.visible = false; e.shell.scale.setScalar(1);
     for (const m of e.parts) m.material.color.copy(ACID);
     e.group.scale.setScalar(1);
     e.group.position.copy(e.home);
@@ -492,7 +513,7 @@ const isLive = (e, t) => !e.down && e.revealedUntil > t;
 // Mark an echo as sensed. The colour tells you which sense found it.
 function reveal(e, t, duration, color) {
   if (e.down) return;
-  if (e.revealedUntil < t) { blip(); for (const m of e.parts) m.material.color.copy(color); }
+  if (e.revealedUntil < t) { blip(); e.baseColor.copy(color); }
   e.revealedUntil = Math.max(e.revealedUntil, t + duration);
 }
 
@@ -503,11 +524,79 @@ function defeat(e, elementKey, t, pushDir) {
   e.push.copy(pushDir || ZERO);
   for (const m of e.parts) { m.material.color.copy(ELEMENTS[elementKey].color); m.material.opacity = 1; }
   e.group.visible = true;
+  e.ice.visible = false;
   downCount++;
   puff(elementKey, e.group.position, 26, 2.4, pushDir && pushDir.lengthSq() ? { dir: pushDir, spread: 1.1 } : {});
   hitSound();
   drawHud();
   if (downCount === ECHO_COUNT) respawnAt = t + 3.5;
+}
+
+// Land an attack on an echo. m is the move (or a bare { damage } for knock-on effects).
+// Works out damage, the mark the discipline leaves, and any combination with marks already there.
+const _hd = new THREE.Vector3(), _hp = new THREE.Vector3();
+function hit(e, key, t, dir, m = {}) {
+  if (e.down) return;
+  _hd.copy(dir || ZERO);
+  const pos = _hp.copy(e.group.position);
+  const frozen = e.frozenUntil > t, soaked = e.soakedUntil > t;
+  let dmg = m.damage ?? (key === 'terra' ? 2 : 1);
+  let note = null, shatter = false;
+
+  if (frozen && key === 'terra') { dmg = 9; shatter = true; note = 'shatter'; }
+  else if (key === 'aero' && e.airborne) { dmg = 9; note = 'air finish'; }
+  else if (m.volt && soaked) { dmg = 9; note = 'conduct'; }
+
+  if (key === 'pyro') {
+    if (frozen) { e.frozenUntil = -1; e.soakedUntil = t + 4; note = note || 'thaw'; }
+    else if (soaked && !m.volt) { e.soakedUntil = -1; note = 'steam'; puff('aero', pos, 22, 1.4, { up: 1.6, life: 0.7, size: 0.06 }); }
+    else if (!m.volt && !m.noBurn) e.burnAt = t + 1.5;
+  } else if (key === 'aqua') {
+    e.burnAt = -1;                                  // water puts fire out
+    if (m.freeze) { e.frozenUntil = t + 6; e.vel.set(0, e.vel.y, 0); }
+    else e.soakedUntil = t + 6;
+  }
+  if (!(e.frozenUntil > t)) {
+    if (m.launch) { e.airborne = true; e.vel.y = 2.2; }       // a slow toss: about a metre up, nearly two seconds of hang
+    if ((key === 'aero' && m.kind !== 'void') || m.kind === 'wall' || m.roll) {   // shoved along the floor
+      const push = key === 'aero' ? 3.5 : 2.5;
+      e.vel.x += _hd.x * push; e.vel.z += _hd.z * push;
+    }
+  }
+  e.revealedUntil = Math.max(e.revealedUntil, t + 5);          // once you have hit it, you can keep track of it
+  e.hp -= dmg;
+  if (note) { hudNote = note; drawHud(); }
+  if (e.hp > 0) { e.flashT = t; tick(); puff(key, pos, 8, 1.6); return; }
+
+  const centre = pos.clone(), away = _hd.clone();
+  defeat(e, key, t, away);
+  if (shatter) {                                    // the ice goes everywhere and cuts what is close
+    puff('aqua', centre, 46, 3.6, { grav: 5, life: 0.8, size: 0.04 });
+    for (const o of echoes) {
+      if (o === e || !isLive(o, t) || o.group.position.distanceTo(centre) > 1.1) continue;
+      hit(o, 'terra', t, o.group.position.clone().sub(centre).normalize(), { damage: 1 });
+    }
+  }
+}
+
+const _step = new THREE.Vector3(), _next = new THREE.Vector3();
+function moveEcho(e, t, dt) {
+  if (e.airborne) {                                 // tossed: rise, hang, come back down to where it floats
+    e.vel.y -= 2.4 * dt;
+    e.home.y += e.vel.y * dt;
+    if (e.vel.y < 0 && e.home.y <= e.restY) { e.home.y = e.restY; e.vel.y = 0; e.airborne = false; }
+  }
+  if (e.vel.x || e.vel.z) {                         // shoved: slide until the room or drag stops it
+    _step.set(e.vel.x * dt, 0, e.vel.z * dt);
+    _next.copy(e.home).add(_step).addScaledVector(_step.normalize(), 0.1);
+    if (collide(e.home, _next)) { e.vel.x = e.vel.z = 0; }
+    else {
+      e.home.x += e.vel.x * dt; e.home.z += e.vel.z * dt;
+      const k = Math.max(1 - 4 * dt, 0);
+      e.vel.x *= k; e.vel.z *= k;
+      if (Math.abs(e.vel.x) + Math.abs(e.vel.z) < 0.05) e.vel.x = e.vel.z = 0;
+    }
+  }
 }
 
 function updateEchoes(t, dt, viewerPos) {
@@ -533,6 +622,21 @@ function updateEchoes(t, dt, viewerPos) {
       continue;
     }
     if (e.down) continue;
+    if (e.burnAt > 0 && t >= e.burnAt) { e.burnAt = -1; hit(e, 'pyro', t, UP, { damage: 1, noBurn: true }); if (e.down) continue; }
+    moveEcho(e, t, dt);
+    const frozen = e.frozenUntil > t, soaked = e.soakedUntil > t, burning = e.burnAt > 0;
+    // A marked or airborne echo stays in view until the mark wears off.
+    const markEnd = Math.max(e.frozenUntil, e.soakedUntil, e.burnAt, e.airborne ? t + 0.5 : -1);
+    if (markEnd > t) e.revealedUntil = Math.max(e.revealedUntil, markEnd);
+    const tint = frozen ? ICE : burning ? ELEMENTS.pyro.color : soaked ? ELEMENTS.aqua.color : e.baseColor;
+    for (const m of e.parts) m.material.color.copy(tint);
+    e.ice.visible = frozen;
+    e.shell.scale.setScalar(e.hp < 2 ? 0.7 : 1);                // cracked down to its core
+    e.core.scale.setScalar(t - e.flashT < 0.15 ? 2.2 : 1);
+    if (e.group.visible) {
+      if (burning && Math.random() < 0.7) puff('pyro', e.group.position, 1, 0.5, { up: 1.2, jitter: 0.08 });
+      if (soaked && !frozen && Math.random() < 0.3) puff('aqua', e.group.position, 1, 0.25, { jitter: 0.1 });
+    }
     const target = e.revealedUntil > t ? 1 : 0;
     e.level += (target - e.level) * Math.min(dt * 5, 1);
     const flicker = e.revealedUntil - t < 1 ? 0.6 + 0.4 * Math.sin(t * 22) : 1;
@@ -540,10 +644,13 @@ function updateEchoes(t, dt, viewerPos) {
     e.group.visible = o > 0.01;
     e.core.material.opacity = o;
     e.shell.material.opacity = o * 0.8;
-    e.halo.material.opacity = o * 0.5;
+    e.halo.material.opacity = e.hp < 2 ? 0 : o * 0.5;
+    e.ice.material.opacity = 0.32 * o;
     e.group.position.copy(e.home);
-    e.group.position.y += Math.sin(t * 1.6 + e.phase) * 0.03;
-    e.shell.rotation.set(t * 0.7 + e.phase, t * 0.9, 0);
+    if (!frozen) {
+      e.group.position.y += Math.sin(t * 1.6 + e.phase) * 0.03;
+      e.shell.rotation.set(t * 0.7 + e.phase, t * 0.9, 0);
+    }
     e.halo.lookAt(viewerPos);
   }
   if (respawnAt > 0 && t > respawnAt) { respawnAt = -1; scatterEchoes(); }
@@ -631,14 +738,16 @@ function energyMat(key, o = {}) {
 }
 
 // Solid rock: opaque, flat shaded from the surface itself, with faint amber seams.
-function stoneMat() {
+function stoneMat(metal = false) {
   return new THREE.ShaderMaterial({
+    uniforms: { uMetal: { value: metal ? 1 : 0 } },
     side: THREE.DoubleSide,
     vertexShader: /* glsl */`
       varying vec3 vW; varying vec3 vObj;
       void main() { vObj = position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: /* glsl */`
       varying vec3 vW; varying vec3 vObj;
+      uniform float uMetal;
       ${NOISE_GLSL}
       void main() {
         vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
@@ -647,7 +756,10 @@ function stoneMat() {
         float grain = fbm(vObj * 7.0);
         vec3 rock = mix(vec3(0.20, 0.17, 0.13), vec3(0.56, 0.48, 0.36), grain) * light;
         float seam = 1.0 - smoothstep(0.0, 0.035, abs(vnoise(vObj * 5.0) - 0.5));
-        gl_FragColor = vec4(rock + vec3(0.88, 0.62, 0.16) * seam * 0.55, 1.0);
+        vec3 L = normalize(vec3(0.35, 1.0, 0.45)), V = normalize(cameraPosition - vW);
+        float spec = pow(max(dot(reflect(-L, n), V), 0.0), 18.0) + 0.35 * pow(1.0 - max(dot(n, V), 0.0), 3.0);
+        vec3 steel = vec3(0.42, 0.45, 0.5) * (0.35 + 0.65 * light) * (0.85 + 0.3 * grain) + vec3(0.95, 0.97, 1.0) * spec;
+        gl_FragColor = vec4(mix(rock + vec3(0.88, 0.62, 0.16) * seam * 0.55, steel, uMetal), 1.0);
       }`,
   });
 }
@@ -815,6 +927,16 @@ function boltMesh(key, m, color) {
   } else if (m.shape === 'rock') {
     const s = size || 0.075;
     g.add(new THREE.Mesh(craggy(new THREE.IcosahedronGeometry(s, 1), s * 0.45), stoneMat()));
+  } else if (m.shape === 'shard') {
+    // Ice: a long hard splinter with a cold glow around it.
+    const shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.035, 0).scale(1, 1, 5.5), glowMat(ICE, 0.95));
+    const frost = new THREE.Mesh(new THREE.OctahedronGeometry(0.06, 0).scale(1, 1, 4.2), glowMat(ELEMENTS.aqua.color, 0.3));
+    g.add(shard, frost);
+  } else if (m.shape === 'disc') {
+    // Metal pulled out of the ground: a toothed steel disc that keeps its edge off every wall.
+    const disc = new THREE.Mesh(craggy(new THREE.CylinderGeometry(0.12, 0.12, 0.022, 10, 1), 0.03), stoneMat(true));
+    disc.name = 'spin';
+    g.add(disc);
   } else if (m.shape === 'jet') {
     const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.075, 1.3, 16, 8, true), energyMat(key, { flow: [0, 0, -2.5], scale: [12, 12, 3], cut: 0.1 }));
     jet.geometry.rotateX(Math.PI / 2).translate(0, 0, -0.6);
@@ -841,7 +963,7 @@ function boltMesh(key, m, color) {
 const _trail = new THREE.Vector3(), _side = new THREE.Vector3(), _back = new THREE.Vector3();
 function boltTrail(key, m, pos, dirN, dt) {
   const wide = m.shape === 'crescent' ? (m.size || 0.16) : m.roll ? 0.18 : 0.02;
-  const rate = { pyro: 110, aqua: 80, terra: m.roll ? 60 : 30, aero: 70 }[key];
+  const rate = m.shape === 'disc' ? 0 : m.shape === 'shard' ? 40 : { pyro: 110, aqua: 80, terra: m.roll ? 60 : 30, aero: 70 }[key];
   let n = rate * dt; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
   _side.set(-dirN.z, 0, dirN.x);
   for (let i = 0; i < n; i++) {
@@ -863,6 +985,7 @@ function castBolt(key, m, c) {
   }
   vel.multiplyScalar(m.speed);
   const mesh = boltMesh(key, m, color);
+  mesh.scale.setScalar(m.power || 1);
   mesh.position.copy(pos);
   puff(key, pos, 10, 1.6, { dir: vel.clone().normalize(), spread: 0.7 });      // muzzle
   const prev = pos.clone();
@@ -907,7 +1030,7 @@ function castBolt(key, m, c) {
       if (!isLive(e, t) || struck.has(e)) continue;
       if (segmentDistance(e.group.position, prev, end || mesh.position) < m.radius) {
         struck.add(e);
-        defeat(e, key, t, dirN.copy(vel).normalize());
+        hit(e, key, t, dirN.copy(vel).normalize(), m);
         if (!m.pierce) return false;
       }
     }
@@ -916,6 +1039,7 @@ function castBolt(key, m, c) {
     dirN.copy(vel).normalize();
     mesh.lookAt(look.copy(mesh.position).add(dirN));
     if (m.shape === 'rock') mesh.rotateX(m.roll ? (t - born) * m.speed / (m.size || 0.2) : t * 9);   // a boulder turns as far as it travels
+    if (m.shape === 'disc') mesh.children[0].rotation.y = t * 40;
     boltTrail(key, m, mesh.position, dirN, dt);
     const age = t - born;
     const fade = Math.min(1, (life - age) / 0.3);
@@ -932,7 +1056,7 @@ function castCone(key, m, c) {
   for (const e of echoes) {
     if (!isLive(e, c.t)) continue;
     _to.copy(e.group.position).sub(origin);
-    if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, e.group.position)) defeat(e, key, c.t, d);
+    if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, e.group.position)) hit(e, key, c.t, d, m);
   }
   // The blast itself: a cone of the element that rushes out and thins, plus loose matter thrown with it.
   const spread = Math.tan(m.angle);
@@ -1009,7 +1133,8 @@ function castColumn(key, m, c) {
   const solid = body, wire = core || body;       // faded together below
   column.position.copy(base);
   column.rotation.y = Math.random() * Math.PI;
-  column.scale.set(1, 0.001, 1);
+  const pw = m.power || 1;
+  column.scale.set(pw, 0.001, pw);
   if (m.pulse) firePulse(base);                  // Terra's eruption also ripples the room
   puff(key, base, key === 'terra' ? 40 : 24, 2.4, { up: 2.5, jitter: 0.2 });
   const born = c.t;
@@ -1020,7 +1145,7 @@ function castColumn(key, m, c) {
     const rise = Math.min(age / 0.16, 1);
     const sink = THREE.MathUtils.clamp((age - 0.75) / 0.35, 0, 1);
     column.scale.y = Math.max(height * rise * (1 - sink), 0.001);
-    if (m.flicker) { const f = 1 + 0.18 * Math.sin(t * 31); column.scale.x = f; column.scale.z = 2 - f; }
+    if (m.flicker) { const f = 1 + 0.18 * Math.sin(t * 31); column.scale.x = f * pw; column.scale.z = (2 - f) * pw; }
     solid.material.opacity = 1 - sink;
     if (core) core.material.opacity = 0.22 * (1 - sink);
     // Loose matter while it stands: embers climb off fire, a geyser's crown rains down, wind winds upward.
@@ -1042,7 +1167,7 @@ function castColumn(key, m, c) {
       for (const e of echoes) {
         if (!isLive(e, t)) continue;
         const p = e.group.position;
-        if (Math.hypot(p.x - base.x, p.z - base.z) < m.radius && p.y < height + 0.1) defeat(e, key, t, UP);
+        if (Math.hypot(p.x - base.x, p.z - base.z) < m.radius && p.y < height + 0.1) hit(e, key, t, UP, m);
       }
     }
     return age < 1.1;
@@ -1090,7 +1215,7 @@ function castRing(key, m, c) {
       const horiz = Math.hypot(p.x - centre.x, p.z - centre.z);
       if (horiz < r && Math.abs(p.y - centre.y) < m.height + 0.1) {
         struck.add(e);
-        defeat(e, key, t, _to.set(p.x - centre.x, 0.6, p.z - centre.z).normalize());
+        hit(e, key, t, _to.set(p.x - centre.x, 0.6, p.z - centre.z).normalize(), m);
       }
     }
     return k < 1;
@@ -1138,8 +1263,8 @@ function castWall(key, m, c) {
       if (!m.passThrough) {
         probeA.copy(wall.position).setY(0.4);
         probeB.copy(probeA).addScaledVector(d, step + 0.1);
-        const hit = collide(probeA, probeB);
-        if (hit) { step = 0; stoppedAt = t; impact(hit.point, hit.normal, key, t, 0.5); }
+        const blocked = collide(probeA, probeB);
+        if (blocked) { step = 0; stoppedAt = t; impact(blocked.point, blocked.normal, key, t, 0.5); }
       }
       wall.position.addScaledVector(d, step);
       travelled += step;
@@ -1156,7 +1281,7 @@ function castWall(key, m, c) {
         _to.copy(e.group.position).sub(wall.position);
         if (Math.abs(_to.dot(d)) < 0.3 + step && Math.abs(_to.dot(right)) < m.width / 2 && e.group.position.y < m.height + 0.1) {
           struck.add(e);
-          defeat(e, key, t, d);
+          hit(e, key, t, d, m);
         }
       }
     }
@@ -1179,8 +1304,8 @@ function castFault(key, m, c) {
     length = Math.min(m.length + 1.5, Math.hypot(_to.x, _to.z) + 0.35);
   }
   const probe = start.clone().setY(start.y + 0.3);
-  const hit = collide(probe, probe.clone().addScaledVector(d, length));
-  if (hit) length = Math.max(hit.point.distanceTo(probe) - 0.15, 0.4);
+  const blocked = collide(probe, probe.clone().addScaledVector(d, length));
+  if (blocked) length = Math.max(blocked.point.distanceTo(probe) - 0.15, 0.4);
   const n = Math.max(2, Math.ceil(length / 0.38));
   const spikes = [];
   for (let i = 0; i < n; i++) {
@@ -1213,7 +1338,7 @@ function castFault(key, m, c) {
         for (const e of echoes) {
           if (!isLive(e, t)) continue;
           const p = e.group.position;
-          if (Math.hypot(p.x - s.at.x, p.z - s.at.z) < 0.35 && p.y < s.at.y + s.h + 0.15) defeat(e, key, t, UP);
+          if (Math.hypot(p.x - s.at.x, p.z - s.at.z) < 0.35 && p.y < s.at.y + s.h + 0.15) hit(e, key, t, UP, m);
         }
       }
     });
@@ -1221,19 +1346,175 @@ function castFault(key, m, c) {
   });
 }
 
-const KIND = { bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault };
+// A flat strip through a list of points, turned to face the viewer. Used for lightning.
+function ribbonGeo(points, width, eye) {
+  const pos = [], idx = [];
+  const tan = new THREE.Vector3(), side = new THREE.Vector3(), toEye = new THREE.Vector3();
+  points.forEach((p, i) => {
+    tan.subVectors(points[Math.min(i + 1, points.length - 1)], points[Math.max(i - 1, 0)]).normalize();
+    side.crossVectors(tan, toEye.subVectors(eye, p)).normalize().multiplyScalar(width / 2);
+    pos.push(p.x + side.x, p.y + side.y, p.z + side.z, p.x - side.x, p.y - side.y, p.z - side.z);
+    if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return g;
+}
+function jagged(a, b, wobble) {
+  const n = Math.max(3, Math.ceil(a.distanceTo(b) / 0.22));
+  const out = [a.clone()];
+  for (let i = 1; i < n; i++) {
+    out.push(a.clone().lerp(b, i / n).add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(wobble)));
+  }
+  out.push(b.clone());
+  return out;
+}
+
+// --- beam: instant. Lightning takes the straight path, then jumps between echoes that are close together. ---
+function castBeam(key, m, c) {
+  const origin = c.hand.clone();
+  const d = c.dir.clone().normalize();
+  const target = aimAssist(origin, d, 0.25, c.t);
+  if (target) d.copy(target.group.position).sub(origin).normalize();
+  const far = origin.clone().addScaledVector(d, m.range);
+  const wall = collide(origin, far);
+  const end = wall ? wall.point : far;
+  let first = null, firstDist = Infinity;
+  for (const e of echoes) {
+    if (!isLive(e, c.t) || segmentDistance(e.group.position, origin, end) > 0.25) continue;
+    const dist = e.group.position.distanceTo(origin);
+    if (dist < firstDist) { firstDist = dist; first = e; }
+  }
+  const stops = [origin];
+  const struck = [];
+  if (first) {
+    let cur = first, jumps = m.chain || 0;
+    struck.push(first); stops.push(first.group.position.clone());
+    for (;;) {                                      // soaked echoes pass it on for free
+      let next = null, nextDist = Infinity;
+      for (const e of echoes) {
+        if (!isLive(e, c.t) || struck.includes(e)) continue;
+        const wet = e.soakedUntil > c.t;
+        if (!wet && jumps <= 0) continue;
+        const dist = e.group.position.distanceTo(cur.group.position);
+        if (dist < (wet ? 4 : 2.6) && dist < nextDist && lineOfSight(cur.group.position, e.group.position)) { next = e; nextDist = dist; }
+      }
+      if (!next) break;
+      if (!(next.soakedUntil > c.t)) jumps--;
+      struck.push(next); stops.push(next.group.position.clone());
+      cur = next;
+    }
+  } else {
+    stops.push(end.clone());
+    if (wall) impact(wall.point, wall.normal, key, c.t, 0.3);
+  }
+  const white = new THREE.Color(0xffffff), glow = new THREE.Color(0xffa63d);
+  for (let i = 1; i < stops.length; i++) puff(key, stops[i], 18, 3, { life: 0.3, size: 0.03, grav: 3 });
+  struck.forEach((e, i) => hit(e, key, c.t, stops[i + 1].clone().sub(stops[i]).normalize(), m));
+  tone(2600, 90, 0.16, 0.22, 'square'); tone(140, 40, 0.5, 0.3);
+
+  const core = new THREE.Mesh(new THREE.BufferGeometry(), glowMat(white, 1));
+  const halo = new THREE.Mesh(new THREE.BufferGeometry(), glowMat(glow, 0.35));
+  const eye = c.eye.clone();
+  const born = c.t;
+  let redraw = -1;
+  addEffect([core, halo], (t) => {
+    const age = t - born;
+    if (t - redraw > 0.05) {                        // re-fork a few times so it crackles
+      redraw = t;
+      const pts = [];
+      for (let i = 1; i < stops.length; i++) pts.push(...jagged(stops[i - 1], stops[i], 0.09).slice(i > 1 ? 1 : 0));
+      core.geometry.dispose(); halo.geometry.dispose();
+      core.geometry = ribbonGeo(pts, 0.022 * (m.power || 1), eye);
+      halo.geometry = ribbonGeo(pts, 0.055 * (m.power || 1), eye);
+    }
+    core.material.opacity = Math.max(1 - age / 0.28, 0);
+    halo.material.opacity = 0.35 * Math.max(1 - age / 0.28, 0);
+    return age < 0.28;
+  });
+}
+
+// --- void: the air is pulled out of one spot. Everything near it is dragged together, then it snaps back. ---
+function castVoid(key, m, c) {
+  const color = ELEMENTS[key].color;
+  const origin = c.hand.clone();
+  const d = c.dir.clone().normalize();
+  const target = aimAssist(origin, d, 0.3, c.t);
+  const centre = new THREE.Vector3();
+  if (target && lineOfSight(origin, target.group.position)) centre.copy(target.group.position);
+  else {
+    const far = origin.clone().addScaledVector(d, target ? origin.distanceTo(target.group.position) : 3);
+    const wall = collide(origin, far);
+    centre.copy(wall ? wall.point.addScaledVector(wall.normal, 0.25) : far);
+  }
+  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), glowMat(color, 0.4));
+  shell.material.wireframe = true;
+  shell.position.copy(centre);
+  const born = c.t, PULL = 0.55;
+  const from = new THREE.Vector3(), inward = new THREE.Vector3();
+  let popped = false;
+  addEffect([shell], (t, dt) => {
+    const age = t - born;
+    const k = Math.min(age / PULL, 1);
+    if (!popped) {
+      shell.scale.setScalar(Math.max(m.radius * (1 - k * 0.92), 0.05));
+      shell.rotation.y += dt * 6;
+      shell.material.opacity = 0.25 + 0.4 * k;
+      for (let i = 0; i < 6; i++) {                 // air rushing in from all sides
+        from.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(m.radius * (1 - k * 0.5));
+        inward.copy(from).multiplyScalar(-3.2 / Math.max(1 - k * 0.5, 0.3));
+        particles.emit(from.add(centre), inward, PCOL.aero[i % 3], 0.022, 0.25, 0, 0);
+      }
+      for (const e of echoes) {
+        if (!isLive(e, t) || e.frozenUntil > t) continue;
+        if (e.home.distanceTo(centre) < m.radius) {
+          e.home.lerp(centre, Math.min(dt * 6, 1));
+          e.restY = e.home.y; e.airborne = false; e.vel.set(0, 0, 0);
+        }
+      }
+      if (k >= 1) {
+        popped = true;
+        puff(key, centre, 50, 4.5, { life: 0.35 });
+        thump();
+        for (const e of echoes) {
+          if (isLive(e, t) && e.group.position.distanceTo(centre) < 0.5) {
+            hit(e, key, t, inward.copy(e.group.position).sub(centre).setY(0).normalize(), m);
+          }
+        }
+      }
+      return true;
+    }
+    const out = (age - PULL) / 0.2;
+    shell.scale.setScalar(0.05 + out * m.radius * 0.8);
+    shell.material.opacity = 0.6 * (1 - out);
+    return out < 1;
+  });
+}
+
+const KIND = { bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid };
+
+// Both hands together: the same move, bigger and one point harder.
+function empowered(key, m, power) {
+  const out = { ...m, power, damage: (m.damage ?? (key === 'terra' ? 2 : 1)) + 1 };
+  for (const k of ['radius', 'range', 'width', 'height', 'maxR', 'length']) if (out[k]) out[k] *= 1.5;
+  if (out.angle) out.angle *= 1.2;
+  if (out.chain) out.chain += 2;
+  return out;
+}
 
 let lastCast = null;
 let selected = 'terra';
 let hudNote = 'open palm toward you: pick';
 
-// c: { hand, dir, eye, fwd, ground, t }. ground is only needed for slam.
+// c: { hand, dir, eye, fwd, ground, t, power }. ground is only needed for slam; power above 1 is a two-handed cast.
 function cast(key, gesture, c) {
-  const m = MOVES[key][gesture];
+  let m = MOVES[key][gesture];
   if (!m) return;
+  if (c.power > 1) m = empowered(key, m, c.power);
   lastCast = key;
   castSound[key]();
-  hudNote = m.name.toLowerCase();
+  hudNote = (c.power > 1 ? 'twin ' : '') + m.name.toLowerCase();
   drawHud();
   KIND[m.kind](key, m, c);
 }
@@ -1385,6 +1666,7 @@ function newHand() {
     palm: new THREE.Vector3(), normal: new THREE.Vector3(), across: new THREE.Vector3(),
     wrist: new THREE.Vector3(), knuckle: new THREE.Vector3(), indexBase: new THREE.Vector3(),
     pinkyBase: new THREE.Vector3(), indexTip: new THREE.Vector3(), hasTip: false,
+    point: false, pointDir: new THREE.Vector3(),
     prev: new THREE.Vector3(), vel: new THREE.Vector3(),
   };
 }
@@ -1409,10 +1691,12 @@ function jointPos(frame, hand, name, refSpace, out) {
 // Which verb, if any, a hand motion is. Pure, so it can be tested without a headset.
 //   curl: fingertip reach / knuckle reach.  normal: unit vector out of the palm.
 //   vel: palm velocity (m/s).  fwd: unit vector the head is facing.
-function classifyGesture(curl, normal, vel, fwd) {
+//   pointDir: unit vector along the index finger when the hand is pointing, otherwise null.
+function classifyGesture(curl, normal, vel, fwd, pointDir = null) {
   const speed = vel.length();
   if (speed < 0.3) return null;
   _vhat.copy(vel).divideScalar(speed);
+  if (pointDir) return speed > POINT_SPEED && _vhat.dot(pointDir) > 0.5 ? 'point' : null;
   if (curl < CURL_FIST) {
     // Straight-down punches are left for slams.
     return speed > PUNCH_SPEED && _vhat.dot(fwd) > 0.35 && _vhat.y > -0.7 ? 'punch' : null;
@@ -1424,6 +1708,13 @@ function classifyGesture(curl, normal, vel, fwd) {
     if (Math.abs(along) < 0.45 && speed > SWEEP_SPEED && Math.abs(_vhat.y) < 0.6) return 'sweep';
   }
   return null;
+}
+
+const handShape = (st) => st.point ? 'point' : st.curl < CURL_FIST ? 'fist' : st.curl > CURL_OPEN ? 'open' : 'loose';
+// Pure: do two tracked hands count as one two-handed move?
+function isTwin(a, b) {
+  if (!b.valid || !b.ready || b.speed < 0.8 || handShape(a) !== handShape(b)) return false;
+  return a.vel.dot(b.vel) > 0.7 * a.speed * b.speed;
 }
 
 function readHand(frame, source, refSpace, st, dt) {
@@ -1442,15 +1733,20 @@ function readHand(frame, source, refSpace, st, dt) {
   if (source.handedness === 'left') st.normal.negate();
   st.across.subVectors(st.pinkyBase, st.indexBase).normalize();
   const reach = st.knuckle.distanceTo(st.wrist) || 0.09;
-  let tipSum = 0, tipN = 0;
+  let tipSum = 0, tipN = 0, indexReach = 0, restSum = 0, restN = 0;
   for (const name of TIPS) {
     if (jointPos(frame, hand, name, refSpace, _tip)) {
-      tipSum += _tip.distanceTo(st.wrist); tipN++;
-      if (name === 'index-finger-tip') st.indexTip.copy(_tip);
+      const r = _tip.distanceTo(st.wrist);
+      tipSum += r; tipN++;
+      if (name === 'index-finger-tip') { st.indexTip.copy(_tip); indexReach = r / reach; }
+      else { restSum += r; restN++; }
     }
   }
-  st.hasTip = tipN > 0;
+  st.hasTip = indexReach > 0;
   st.curl = tipN ? tipSum / tipN / reach : 1.4;
+  // Pointing: index out, the other three fingers tucked in.
+  st.point = indexReach > CURL_OPEN && restN > 0 && restSum / restN / reach < CURL_FIST + 0.1;
+  if (st.point) st.pointDir.subVectors(st.indexTip, st.indexBase).normalize();
   if (st.seen && dt > 0) {
     _raw.subVectors(st.palm, st.prev).divideScalar(dt);
     st.vel.lerp(_raw, 0.5);
@@ -1508,7 +1804,8 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
 
   for (const st of [L, R]) {
     if (!st.valid || st === menuHand) continue;
-    const isFist = st.curl < CURL_FIST, isOpen = st.curl > CURL_OPEN;
+    const isFist = st.curl < CURL_FIST && !st.point, isOpen = st.curl > CURL_OPEN;
+    const other = st === L ? R : L;
 
     // Surfaces: an open palm touches (Terra's sense), a fist slams (every discipline).
     const hitPalm = nearestSurface(st.palm);
@@ -1540,14 +1837,21 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
 
     // Attacks.
     if (st.ready && t - st.lastCast > CAST_COOLDOWN && t - st.lastTouch > 0.3) {
-      const gesture = classifyGesture(st.curl, st.normal, st.vel, _fwd);
+      const gesture = classifyGesture(st.curl, st.normal, st.vel, _fwd, st.point ? st.pointDir : null);
       if (gesture) {
         st.ready = false;
         st.lastCast = t;
         const c = { eye: viewerPos.clone(), fwd: _fwd.clone(), t };
         if (gesture === 'punch') { c.hand = st.knuckle.clone(); c.dir = st.vel.clone(); }
         else if (gesture === 'shove') { c.hand = st.palm.clone(); c.dir = st.normal.clone(); }
+        else if (gesture === 'point') { c.hand = st.indexTip.clone(); c.dir = st.pointDir.clone(); }
         else { c.hand = st.palm.clone(); c.dir = _fwd.clone(); }   // lift and sweep aim where you look
+        // Twin cast: the other hand is doing the same thing, the same way, right now.
+        if (isTwin(st, other) && other !== menuHand) {
+          other.ready = false; other.lastCast = t;
+          c.power = 1.6;
+          if (gesture !== 'lift' && gesture !== 'sweep') c.hand.lerp(gesture === 'punch' ? other.knuckle : gesture === 'point' ? other.indexTip : other.palm, 0.5);
+        }
         cast(selected, gesture, c);
       }
     }
@@ -1628,7 +1932,7 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
     if (selected !== 'aero') { hudNote = ELEMENTS[selected].sense.toLowerCase(); drawHud(); }
     return;
   }
-  const c = { hand, dir, eye, fwd, t };
+  const c = { hand, dir, eye, fwd, t, power: ev.shiftKey ? 1.6 : 1 };
   if (previewGesture === 'lift' || previewGesture === 'sweep') c.dir = aimPoint.clone().sub(eye).normalize();
   if (previewGesture === 'slam') {
     c.ground = eye.clone().addScaledVector(fwd, 1.1).setY(0);
@@ -1641,7 +1945,7 @@ for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); se
 window.addEventListener('keydown', (ev) => {
   const i = '1234'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
-  const g = 'qwerty'.indexOf(ev.key.toLowerCase());
+  const g = 'qwertyu'.indexOf(ev.key.toLowerCase());
   if (g >= 0) selectGesture(GESTURES[g]);
 });
 
@@ -1700,7 +2004,7 @@ if (navigator.xr && navigator.xr.isSessionSupported) {
     if (ok) {
       enterBtn.disabled = false;
       statusEl.textContent = 'Headset ready.';
-      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep or slam a fist on a surface.';
+      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Do a move with both hands for a twin version.';
     } else {
       statusEl.textContent = 'No mixed reality here. Open this page in the Quest browser to play for real.';
     }
@@ -1772,7 +2076,7 @@ renderer.setAnimationLoop((ms, frame) => {
 // Small hook for automated checks.
 window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
-  collide, lineOfSight, senseAero, selectElement, held, reveal, particles,
+  collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin,
   setHold(h) { previewHold = h; },
   get down() { return downCount; },
   get selected() { return selected; },

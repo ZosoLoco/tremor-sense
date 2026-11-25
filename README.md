@@ -210,3 +210,22 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
   using that discipline's basic attack in your current sub-element: Ember Wisp, Stone Sentry, Cyclone (roams),
   Sun Mote (follows you), Moon (orbits you), Guide Star (climbs high), Shade (follows you). Flora grows a snapper on
   the nearest surface; Necro raises two thralls. Two familiars at a time, 22 seconds each.
+
+## Build 12: looks, and one thing per discipline nobody else does
+
+- **The seal.** Two fingers up (index and middle, the others folded), held still: the discipline's signature, on the
+  whole room, ten seconds between uses. Pyro Wildfire (every burn spreads and bursts), Aqua Tide Call (every source
+  erupts, water refills), Terra Upheaval (everything loose flies at creatures), Aero Eye of the Storm (six seconds
+  where nothing thrown reaches you), Lumen Flashbang, Gravis Reverse (everything falls up, then drops), Flora Bloom
+  (rooted things burst, snappers wake), Astra Alignment (a comet for each creature you can see), Morph Second Skin
+  (heal and armour), Umbra Lights Out, Necro Detonate (thralls explode; with none, one rises).
+- **Umbra** is drawn dark instead of glowing, with black smoke for sparks. Shade Spike comes out of the surface
+  nearest the target. Eclipse is a ball of dark that stays five seconds: blind and bleeding inside, shards vanish.
+- **Gravis.** Graviton is slow and homes. Levitate lifts, holds, then drops for damage.
+- **Columns from any surface** for every discipline except Astra (floor, wall, ceiling, table: whichever is nearest
+  the target).
+- **Shots have bodies.** Lumen a rayed star, Astra a comet with a tail, Flora a fletched thorn or a tumbling seed pod,
+  Gravis a black marble with a ring of light, Umbra a patch of dark, Necro bone. Aero leaves a corkscrew of streaks.
+- **Water.** The stream wobbles; every source ripples.
+- **Creatures have bodies** by kind: crawler legs, flyer wings that beat, brute horns and plates, frost crystals,
+  shade hood and tatters, ember flames, drip, pebble lumps, wisp rings.

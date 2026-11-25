@@ -144,7 +144,7 @@ const forms = { pyro: 'flame', aqua: 'water', aero: 'wind', lumen: 'light', grav
 const formOf = (key) => key === 'terra' ? terraForm : forms[key];
 // Which set of colours a move is drawn in.
 const lookOf = (key, m) => m && m.form === 'lightning' ? 'volt' : key;
-const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip', 'charge', 'draw'];
+const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', 'grip', 'charge', 'draw', 'seal'];
 
 // What each verb does per discipline. kind picks the behaviour, the rest are its numbers.
 const MOVES = {
@@ -199,9 +199,9 @@ const MOVES = {
     charge: { name: 'Sunburst',   kind: 'bolt',   speed: 10, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.4, damage: 2, life: 2.2 },
   },
   gravis: {
-    punch: { name: 'Graviton',    kind: 'bolt',   speed: 6, radius: 0.3, shape: 'orb', size: 0.06, implode: 1.4 },
+    punch: { name: 'Graviton',    kind: 'bolt',   speed: 4.5, radius: 0.3, shape: 'orb', size: 0.06, implode: 1.4, homing: 7, life: 4 },   // slow, and it will not miss: it falls toward what you threw it at
     shove: { name: 'Repulse',     kind: 'cone',   range: 5, angle: 0.6, push: 5 },
-    lift:  { name: 'Levitate',    kind: 'column', launch: true, radius: 0.45, top: 0.28, bottom: 0.28, sides: 18 },
+    lift:  { name: 'Levitate',    kind: 'column', launch: true, drop: 1.3, radius: 0.45, top: 0.28, bottom: 0.28, sides: 18 },   // up, a held breath, then let go
     sweep: { name: 'Tilt',        kind: 'wall',   ram: 6, width: 2.2, height: 1.3, passThrough: true },
     slam:  { name: 'Crush',       kind: 'ring',   maxR: 3.6, height: 1.6 },
     point: { name: 'Singularity', kind: 'void',   radius: 2, range: 10 },
@@ -239,8 +239,8 @@ const MOVES = {
     charge: { name: 'Rocket Fist', kind: 'bolt',  speed: 13, radius: 0.4, shape: 'fist', pierce: true, damage: 3, boomerang: true, life: 0.9 },   // the fist leaves, and comes home
   },
   umbra: {
-    punch: { name: 'Shade Bolt',  kind: 'bolt',   speed: 10, radius: 0.25, shape: 'orb', size: 0.05 },
-    shove: { name: 'Eclipse',     kind: 'cone',   range: 5, angle: 0.8 },
+    punch: { name: 'Shade Spike', kind: 'column', radius: 0.3, top: 0.01, bottom: 0.13, sides: 4 },       // nothing leaves your hand: it comes out of the surface nearest the target
+    shove: { name: 'Eclipse',     kind: 'zone',   radius: 1.3, seconds: 5 },                              // a ball of dark that stays: what is inside is blind and bleeding
     lift:  { name: 'Pit',         kind: 'void',   radius: 1.4, range: 8 },
     sweep: { name: 'Scythe',      kind: 'bolt',   speed: 12, radius: 0.45, shape: 'crescent', size: 0.45, pierce: true, life: 1 },
     slam:  { name: 'Nightfall',   kind: 'ring',   maxR: 4.5, height: 1.6 },
@@ -649,6 +649,7 @@ SFX.necro = {
   bite:   [['n', 'bandpass', 2600, 1300, 0.04, 0.3, 4, 0, 0.002], ['t', 180, 120, 0.08, 0.2, 'square']],
 };
 SFX.summon = [['t', 262, 523, 0.5, 0.14, 'triangle'], ['t', 392, 784, 0.5, 0.1, 'triangle', 0.1], ['n', 'highpass', 3000, 6000, 0.5, 0.08, 0.7, 0.1, 0.2]];
+SFX.seal = [['t', 220, 880, 0.5, 0.16, 'triangle'], ['t', 330, 1320, 0.5, 0.1, 'triangle', 0.05], ['n', 'bandpass', 500, 4000, 0.5, 0.2, 2, 0, 0.3], ['t', 110, 55, 0.6, 0.35, 'sine', 0.45]];
 SFX.swap = [['t', 600, 900, 0.07, 0.12, 'triangle']];
 SFX.guard = [['t', 300, 600, 0.15, 0.2, 'triangle'], ['n', 'bandpass', 1500, 2500, 0.2, 0.15, 3]];
 SFX.guardHit = [['t', 700, 500, 0.1, 0.2, 'triangle'], ['n', 'highpass', 4000, 3000, 0.06, 0.25, 0.7, 0, 0.002]];
@@ -1095,10 +1096,11 @@ function scatterEchoes(keepWorld = false) {
     const KK = KINDS[e.kind];
     e.home.copy(KK.alt ? openSpot(box, Math.min(KK.alt, box.max.y - 0.4), Math.min(KK.alt + 0.25, box.max.y - 0.3), 0.3, eye, taken, 0.7) : openSpot(box, 0.5, 1.7, 0.3, eye, taken, 0.7));
     e.group.scale.setScalar(KK.scale || 1);
+    dressEcho(e);
     taken.push(e.home.clone());
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;
     e.hp = KINDS[e.kind].hp; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
-    e.burnAt = e.soakedUntil = e.frozenUntil = e.metalUntil = e.blindUntil = e.drainAt = e.exposedUntil = e.rootedUntil = e.seedAt = -1; e.venom = 0;
+    e.burnAt = e.soakedUntil = e.frozenUntil = e.metalUntil = e.blindUntil = e.drainAt = e.exposedUntil = e.rootedUntil = e.seedAt = e.dropAt = -1; e.venom = 0;
     e.baseColor.copy(ACID); e.ice.visible = false; e.shell.scale.setScalar(1);
     e.goal.copy(e.home); e.goalUntil = 0; e.windup = -1; e.puppet = false; e.last.copy(e.home);
     for (const bead of e.tail) { bead.position.copy(e.home); bead.visible = false; }
@@ -1217,6 +1219,7 @@ function hit(e, key, t, dir, m = {}) {
     else { e.blindUntil = Math.max(e.blindUntil || -1, t + 1.5); e.exposedUntil = t + 8; }
   }
   if (key === 'gravis') {
+    if (m.drop) e.dropAt = t + m.drop;
     if (e.airborne && (m.kind === 'ring' || m.crush)) { dmg = 9; note = 'brought down'; }
     else if (m.crush) { e.blindUntil = t + 3; e.vel.set(0, e.vel.y, 0); note = note || 'pinned'; }
   }
@@ -1398,6 +1401,7 @@ function updateEchoes(t, dt, viewerPos) {
     if (e.down) continue;
     if (e.burnAt > 0 && t >= e.burnAt) { e.burnAt = -1; hit(e, 'pyro', t, UP, { damage: 1, noBurn: true }); if (e.down) continue; }
     if (e.drainAt > 0 && t >= e.drainAt) { e.drainAt = e.venom > 0 ? (e.venom--, t + 1.2) : -1; hit(e, 'aero', t, ZERO, { damage: 1, kind: 'void' }); if (e.down) continue; }
+    if (e.dropAt > 0 && t >= e.dropAt) { e.dropAt = -1; thump(); puff('gravis', e.group.position, 20, 2.5, {}); hit(e, 'gravis', t, UP, { damage: 2, kind: 'void' }); if (e.down) continue; }
     if (e.seedAt > 0 && t >= e.seedAt) {             // the seed comes up: it and everything beside it are rooted
       e.seedAt = -1;
       const at = e.group.position.clone();
@@ -1430,6 +1434,7 @@ function updateEchoes(t, dt, viewerPos) {
     const o = e.level * flicker;
     e.group.visible = o > 0.01;
     e.core.material.opacity = o;
+    if (e.extraMat) { e.extraMat.opacity = o * 0.9; if (e.wings) { e.wings[0].rotation.z = 0.3 + 0.6 * Math.sin(t * 16); e.wings[1].rotation.z = -0.3 - 0.6 * Math.sin(t * 16); } if (e.spin) e.spin.rotation.y = t * 2; }
     e.shell.material.opacity = o * 0.8;
     e.halo.material.opacity = e.hp < 2 ? 0 : o * 0.5;                // the outer ring is its second life: chi reads it at a glance
     e.ice.material.opacity = 0.32 * o;
@@ -1512,7 +1517,7 @@ const ENERGY = {
   flora:  { a: 0xe4ffb0, b: 0x4fae2a, c: 0x1d4a12, scale: [8, 3, 8], speed: 1.4, cut: 0.3, soft: 0.3 },
   astra:  { a: 0xffffff, b: 0x8fa8ff, c: 0x1a2a7a, scale: [12, 12, 12], speed: 2.2, cut: 0.42, soft: 0.2 },
   morph:  { a: 0xffe0d8, b: 0xd8485c, c: 0x4a0a18, scale: [6, 6, 6], speed: 2, cut: 0.3, soft: 0.35 },
-  umbra:  { a: 0xd9a8ff, b: 0x6a12b8, c: 0x0c0218, scale: [5, 5, 5], speed: 1.8, cut: 0.34, soft: 0.4 },
+  umbra:  { a: 0x000000, b: 0x0a0312, c: 0x3a1460, scale: [5, 5, 5], speed: 1.8, cut: 0.3, soft: 0.4 },      // black at the heart, a violet fringe; drawn dark, not glowing
   necro:  { a: 0xeafff4, b: 0x3fd69e, c: 0x06301f, scale: [9, 4, 9], speed: 1.0, cut: 0.36, soft: 0.3 },
 };
 // flow is the direction the pattern travels, in the mesh's own space. fadeY (0 to 1) thins it out toward the top of the mesh.
@@ -1563,6 +1568,7 @@ function waterMat(o = {}) {
 function energyMat(key, o = {}) {
   if (key === 'aqua') return waterMat({ flow: o.flow, scale: o.scale, opacity: o.opacity, body: 0.07 });
   const P = ENERGY[key];
+  const dark = key === 'umbra';                    // shadow covers what is behind it instead of adding light to it
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uTime: pulseUniforms.uTime,
@@ -1572,7 +1578,7 @@ function energyMat(key, o = {}) {
       uCut: { value: o.cut ?? P.cut }, uSoft: { value: P.soft },
       uFade: { value: o.fadeY === true ? 1 : (o.fadeY || 0) }, uOpacity: { value: 1 },
     },
-    transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, depthTest: false, blending: dark ? THREE.NormalBlending : THREE.AdditiveBlending, premultipliedAlpha: dark, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
       varying vec3 vObj; varying vec2 vUv;
       void main() { vObj = position; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -1775,7 +1781,9 @@ const PSTYLE = {
 };
 const _pv = new THREE.Vector3(), _pp = new THREE.Vector3();
 // n particles from a point. dir + spread aims them; without dir they go every way.
+const SHADOW = new THREE.Color(0x040108);
 function puff(key, point, n, speed, o = {}) {
+  if (key === 'umbra') { fume(SHADOW, point, Math.max(1, Math.round(thinned(n) / 3)), { size: 0.1 + speed * 0.02, life: 0.8, jitter: 0.06 + speed * 0.03, rise: 0.12 }); return; }
   const S = PSTYLE[key], C = PCOL[key];
   n = thinned(n);
   for (let i = 0; i < n; i++) {
@@ -1887,6 +1895,47 @@ function boltMesh(key, m, color) {
     const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.075, 1.3, 16, 8, true), energyMat(lookOf(key, m), { flow: [0, 0, -2.5], scale: [12, 12, 3], cut: 0.1 }));
     jet.geometry.rotateX(Math.PI / 2).translate(0, 0, -0.6);
     g.add(jet, new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), glowMat(new THREE.Color(ENERGY.aqua.a), 0.9)));
+  } else if (key === 'lumen') {
+    // Light: a hard white point with rays, no flame, no tail.
+    const s = (size || 0.04) * 2.4;
+    g.add(new THREE.Mesh(new THREE.OctahedronGeometry(s * 0.35), new THREE.MeshBasicMaterial({ color: 0xffffff })));
+    for (const r of [[1, 0, 0], [0, 1, 0], [0.7, 0.7, 0], [0.7, -0.7, 0]]) {
+      const ray = new THREE.Mesh(new THREE.BoxGeometry(s * 2.6, s * 0.06, s * 0.06), glowMat(new THREE.Color(0xfff1b0), 0.85));
+      ray.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(...r).normalize());
+      g.add(ray);
+    }
+    const streak = new THREE.Mesh(new THREE.BoxGeometry(s * 0.08, s * 0.08, s * 5).translate(0, 0, -s * 2.5), glowMat(new THREE.Color(0xffffff), 0.7));
+    g.add(streak);
+  } else if (key === 'astra') {
+    // A comet: a small bright head and a long cold tail.
+    const s = size || 0.05;
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(s * 0.7, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffffff })));
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(s * 1.1, s * 18, 12, 8, true), energyMat('astra', { flow: [0, 0, -3], scale: [20, 20, 3], cut: 0.3 }));
+    tail.geometry.rotateX(-Math.PI / 2).translate(0, 0, -s * 9);
+    g.add(tail);
+  } else if (key === 'flora') {
+    if (m.seed || m.entangle) {                     // a seed pod: brown, ridged, turning over as it flies
+      const pod = new THREE.Mesh(new THREE.SphereGeometry(size || 0.05, 8, 6).scale(0.8, 0.8, 1.4), new THREE.MeshBasicMaterial({ color: 0x7a5230 }));
+      const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.06, 5).rotateX(-Math.PI / 2).translate(0, 0, -(size || 0.05) * 1.6), new THREE.MeshBasicMaterial({ color: 0x7fd65a }));
+      g.add(pod, sprout);
+    } else {                                        // a thorn with two leaves for fletching
+      g.add(new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.2, 5).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x2f6e1a })));
+      for (const side of [1, -1]) g.add(new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 3).scale(1, 1, 0.15).rotateZ(side * 1.1).translate(side * 0.03, 0, -0.08), new THREE.MeshBasicMaterial({ color: 0x7fd65a, side: THREE.DoubleSide })));
+    }
+  } else if (key === 'gravis') {
+    // A black marble with a ring of light being pulled round it.
+    const s = (size || 0.06) * 1.2;
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(s, 16, 12), new THREE.MeshBasicMaterial({ color: 0x05020c })));
+    const disc = new THREE.Mesh(new THREE.TorusGeometry(s * 1.9, s * 0.16, 6, 40).scale(1, 1, 0.3), glowMat(new THREE.Color(0xb48cff), 0.9));
+    disc.rotation.x = 1.2; disc.userData.spin = 9;
+    const disc2 = new THREE.Mesh(new THREE.TorusGeometry(s * 2.6, s * 0.07, 6, 40).scale(1, 1, 0.3), glowMat(new THREE.Color(0xe9dcff), 0.6));
+    disc2.rotation.x = 1.2; disc2.userData.spin = -5;
+    g.add(disc, disc2);
+  } else if (key === 'umbra') {
+    // Not a thing so much as a patch of dark with a ragged edge.
+    const s = size || 0.06;
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(s, 14, 10), new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false })));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(s * 2, 18, 14), energyMat('umbra', { scale: [10, 10, 10], flow: [0, 0, -1.5], cut: 0.36 })));
   } else if (key === 'aero') {
     // Air is mostly seen by what it drags along: a hard little core and a thin wake.
     const s = size || 0.03;
@@ -1907,7 +1956,17 @@ function boltMesh(key, m, color) {
 }
 // What a moving bolt leaves behind it each frame.
 const _trail = new THREE.Vector3(), _side = new THREE.Vector3(), _back = new THREE.Vector3();
+const _sw = new THREE.Vector3(), _su = new THREE.Vector3();
 function boltTrail(key, m, pos, dirN, dt) {
+  if (key === 'aero') {                             // two streaks winding round the line of travel
+    const ang = pulseUniforms.uTime.value * 34, r = m.shape === 'crescent' ? 0.2 : m.shape === 'vortex' ? 0.3 : 0.07;
+    _side.set(-dirN.z, 0, dirN.x).normalize(); _su.crossVectors(dirN, _side);
+    for (const ph of [0, Math.PI]) {
+      _sw.copy(_side).multiplyScalar(Math.cos(ang + ph)).addScaledVector(_su, Math.sin(ang + ph));
+      _trail.copy(pos).addScaledVector(_sw, r);
+      particles.emit(_trail, _sw.multiplyScalar(0.5).addScaledVector(dirN, -1.2), PCOL.aero[ph ? 0 : 2], 0.016, 0.22, 0, 2);
+    }
+  }
   const wide = m.shape === 'crescent' ? (m.size || 0.16) : m.roll ? 0.18 : 0.02;
   const rate = m.shape === 'disc' ? 0 : m.shape === 'shard' ? 40 : ({ pyro: 110, volt: 90, aqua: 80, terra: m.roll ? 60 : 30, aero: 70 }[key] || 70);
   let n = rate * dt; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
@@ -2032,6 +2091,8 @@ function castBolt(key, m, c) {
     if (m.shape === 'rock') mesh.rotateX(m.roll ? (t - born) * m.speed / (m.size || 0.2) : t * 9);   // a boulder turns as far as it travels
     if (m.shape === 'disc') mesh.children[0].rotation.y = t * 40;
     if (m.shape === 'vortex') for (const band of mesh.children) band.rotation.z += dt * band.userData.spin;
+    if (key === 'gravis') for (const ch of mesh.children) if (ch.userData.spin) ch.rotation.z += dt * ch.userData.spin;
+    if (key === 'flora' && m.seed) mesh.children[0].rotation.x += dt * 9;
     boltTrail(vk, m, mesh.position, dirN, dt);
     if (m.form === 'steam' && Math.random() < 0.4) fume(STEAM, mesh.position, 1, { size: 0.16, life: 0.6, rise: 0.2 });
     if (key === 'pyro') lightNow(mesh.position, FIRE_LIGHT, m.blast ? 1.8 : 1.0);
@@ -2123,8 +2184,8 @@ function castColumn(key, m, c) {
   const target = aimAssist(c.eye, d, 0.6, c.t);
   const base = new THREE.Vector3(), axis = new THREE.Vector3(0, 1, 0);
   let height = 1.0;
-  if (key === 'terra') {
-    // Stone answers from whatever is closest: the floor, a wall beside the target, the ceiling over it, a table.
+  if (key !== 'astra') {
+    // Every discipline answers from whatever is closest: the floor, a wall beside the target, the ceiling over it, a table.
     const near = target ? nearestRoomSurface(target.group.position, 2.4) : null;
     const seen = !target ? collide(c.eye, c.eye.clone().addScaledVector(d, 12)) : null;
     if (near) { base.copy(near.point); axis.copy(near.normal); height = near.dist + 0.2; }
@@ -2717,7 +2778,32 @@ function raiseThrall(pos, t) {
 function castLegion(key, m, c) {
   for (let i = 0; i < m.count; i++) raiseThrall(c.hand.clone().add(new THREE.Vector3(Math.cos(i * 2.1) * 0.5, 0.1, Math.sin(i * 2.1) * 0.5 - 0.4)), c.t + i * 0.001);
 }
-const KIND = { legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
+// --- zone: a volume that stays where you put it and works on whatever is inside.
+function castZone(key, m, c) {
+  const d = c.dir.clone().normalize(), t = c.t;
+  const mark = aimAssist(c.hand, d, 0.4, t);
+  const wall = collide(c.hand, c.hand.clone().addScaledVector(d, 4));
+  const centre = mark ? mark.group.position.clone() : wall ? wall.point.clone().addScaledVector(wall.normal, m.radius * 0.6) : c.hand.clone().addScaledVector(d, 3);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), energyMat(key, { scale: [2.5, 2.5, 2.5], flow: [0.3, 0.5, 0.2], cut: 0.12 }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 6, 60), glowMat(ELEMENTS[key].color.clone(), 0.6));
+  ball.position.copy(centre); rim.position.copy(centre);
+  const until = t + m.seconds, last = new Map(), epoch = shapeEpoch;
+  addEffect([ball, rim], (n) => {
+    if (epoch !== shapeEpoch) return false;
+    const k = Math.min((n - t) / 0.3, 1) * Math.min((until - n) / 0.5, 1);
+    ball.scale.setScalar(Math.max(m.radius * k, 0.01)); rim.scale.setScalar(Math.max(m.radius * k, 0.01));
+    rim.lookAt(viewerPos);
+    if (Math.random() < 0.5) puff(key, _np.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(m.radius * 1.6).add(centre), 1, 0.3, {});
+    for (const e of echoes) {
+      if (e.down || e.group.position.distanceTo(centre) > m.radius) continue;
+      e.blindUntil = Math.max(e.blindUntil, n + 0.5);
+      if (n - (last.get(e) || -9) > 1.1) { last.set(e, n); hit(e, key, n, ZERO, { ...m, damage: 1, kind: 'void' }); }
+    }
+    for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(centre) < m.radius) { o.dead = true; puff(key, o.pos, 8, 1, {}); }   // what is thrown into the dark does not come out
+    return n < until;
+  });
+}
+const KIND = { zone: castZone, legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: castWhip };
 
 // Both hands together: the same move, bigger and one point harder.
 function empowered(key, m, power) {
@@ -2733,6 +2819,45 @@ let selected = 'terra';
 let hudNote = 'open palm toward you: pick';
 
 // c: { hand, dir, eye, fwd, ground, t, power }. ground is only needed for slam; power above 1 is a two-handed cast.
+// What a creature looks like beyond its core: legs, wings, horns, crystals. Built when its kind is decided.
+function dressEcho(e) {
+  if (e.extra) { e.group.remove(e.extra); e.extra.traverse(c => { if (c.geometry) c.geometry.dispose(); }); }
+  e.extra = null; e.wings = null; e.spin = null;
+  const K = KINDS[e.kind];
+  if (!K || e.kind === 'plain') return;
+  if (!e.extraMat) e.extraMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthTest: false, side: THREE.DoubleSide });
+  e.extraMat.color.set(K.colour);
+  const g = e.extra = new THREE.Group(), M = e.extraMat;
+  const add = (geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, parent = g) => { const m = new THREE.Mesh(geo, M); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.renderOrder = 6; parent.add(m); return m; };
+  const R = 0.16;
+  if (e.kind === 'crawler') {                       // six legs, low and wide
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const hip = new THREE.Group(); hip.rotation.y = a; g.add(hip); add(new THREE.CylinderGeometry(0.008, 0.012, 0.22, 4).translate(0, -0.11, 0), R, 0, 0, 0, 0, -0.9, hip); }
+    add(new THREE.SphereGeometry(R * 0.9, 10, 6).scale(1.2, 0.35, 1.2));
+  } else if (e.kind === 'flyer') {                  // two wings that beat
+    e.wings = [1, -1].map(side => { const w = new THREE.Group(); g.add(w); add(new THREE.ConeGeometry(0.11, 0.34, 3).scale(1, 1, 0.06).rotateZ(-side * Math.PI / 2).translate(side * 0.22, 0, 0), 0, 0, 0, 0, 0, 0, w); return w; });
+    add(new THREE.ConeGeometry(0.03, 0.2, 4).rotateX(-Math.PI / 2), 0, 0, -0.2);
+  } else if (e.kind === 'brute') {                  // horns and a belt of plates
+    for (const side of [1, -1]) add(new THREE.ConeGeometry(0.035, 0.16, 5), side * 0.11, 0.17, 0.03, 0, 0, -side * 0.6);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; add(new THREE.BoxGeometry(0.09, 0.11, 0.02), Math.cos(a) * 0.2, -0.03, Math.sin(a) * 0.2, 0, -a + Math.PI / 2, 0); }
+  } else if (e.kind === 'frost') {                  // crystal growing out of it
+    e.spin = new THREE.Group(); g.add(e.spin);
+    for (let i = 0; i < 7; i++) { const d = new THREE.Vector3(Math.sin(i * 2.4) * Math.cos(i), Math.cos(i * 2.4), Math.sin(i * 2.4) * Math.sin(i)).normalize(); const sp = add(new THREE.OctahedronGeometry(0.035).scale(1, 3.2, 1), d.x * 0.19, d.y * 0.19, d.z * 0.19, 0, 0, 0, e.spin); sp.quaternion.setFromUnitVectors(UP, d); }
+  } else if (e.kind === 'shade') {                  // a hood, and tatters underneath
+    add(new THREE.ConeGeometry(0.2, 0.3, 7, 1, true), 0, 0.1, 0);
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; add(new THREE.ConeGeometry(0.03, 0.22, 3).rotateX(Math.PI), Math.cos(a) * 0.12, -0.24, Math.sin(a) * 0.12); }
+  } else if (e.kind === 'ember') {                  // tongues of flame standing off it
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; add(new THREE.ConeGeometry(0.035, 0.18 + (i % 2) * 0.08, 4), Math.cos(a) * 0.11, 0.2, Math.sin(a) * 0.11, Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4); }
+  } else if (e.kind === 'drip') {                   // a drop: a tail that points up, a skirt of drips
+    add(new THREE.ConeGeometry(0.1, 0.28, 10), 0, 0.24, 0);
+    for (let i = 0; i < 3; i++) add(new THREE.SphereGeometry(0.025, 6, 5), Math.cos(i * 2.1) * 0.1, -0.24 - i * 0.03, Math.sin(i * 2.1) * 0.1);
+  } else if (e.kind === 'pebble') {                 // lumps of rock stuck to it
+    for (let i = 0; i < 6; i++) add(new THREE.DodecahedronGeometry(0.05 + (i % 3) * 0.015), Math.cos(i * 1.9) * 0.17, Math.sin(i * 1.3) * 0.14, Math.sin(i * 1.9) * 0.17, i, i * 2, 0);
+  } else if (e.kind === 'wisp') {                   // nothing but two rings turning
+    e.spin = new THREE.Group(); g.add(e.spin);
+    add(new THREE.TorusGeometry(0.2, 0.008, 5, 30), 0, 0, 0, 1.1, 0, 0, e.spin); add(new THREE.TorusGeometry(0.24, 0.006, 5, 30), 0, 0, 0, -0.7, 0.5, 0, e.spin);
+  }
+  e.group.add(g);
+}
 // Armour: for a few seconds, what is thrown at you breaks on you.
 let armourUntil = -1;
 function armour(t, seconds) { armourUntil = Math.max(armourUntil, t + seconds); play(SFX.guard); hudNote = 'armoured'; }
@@ -3713,6 +3838,15 @@ function updateVoids(t) {
 }
 // Water you have put on a ceiling rains: what stands under it is soaked.
 function rain(t) {
+  for (const sc of sources) {                       // every puddle keeps rippling, on whatever surface it lies
+    if (t - (sc.rippleT || 0) < 0.9) continue;
+    sc.rippleT = t;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 40), glowMat(new THREE.Color(0xdff6ff), 0.5));
+    ring.position.copy(sc.pos).addScaledVector(sc.normal, -0.02);
+    ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), sc.normal);
+    const from = 0.04 + Math.random() * 0.1;
+    addEffect([ring], (n) => { const k = (n - t) / 1.3; ring.scale.setScalar(from + k * 0.4); ring.material.opacity = 0.5 * (1 - k); return k < 1; });
+  }
   for (const sc of sources) {
     if (sc.normal.y > -0.5) continue;
     if (Math.random() < 0.6) particles.emit(_bd.copy(sc.pos).add(_np.set((Math.random() - 0.5) * 0.7, 0, (Math.random() - 0.5) * 0.7)), _nt.set(0, -2.5, 0), PCOL.aqua[1], 0.014, 0.9, 6, 0);
@@ -3721,6 +3855,43 @@ function rain(t) {
     for (const e of echoes) if (!e.down && e.group.position.y < sc.pos.y && Math.hypot(e.group.position.x - sc.pos.x, e.group.position.z - sc.pos.z) < 0.6) { e.soakedUntil = Math.max(e.soakedUntil, t + 4); reveal(e, t, 2, ELEMENTS.aqua.color); }
     quench(sc.pos.clone().setY(0.2), 0.6, t);
   }
+}
+
+// ---------- the seal ----------
+// Two fingers up (index and middle, the others folded), held still for a moment. Not an attack with a shape: each
+// discipline does the one thing only it can do, to the whole room at once. Ten seconds between uses.
+const SEAL_COOLDOWN = 10;
+let sealAt = -99;
+const liveEchoes = () => echoes.filter(e => !e.down);
+const SEALS = {
+  pyro:   { name: 'Wildfire',   go: (t) => { let n = 0; for (const e of liveEchoes()) if (e.burnAt > 0) { n++; for (const o of liveEchoes()) if (o !== e && !(o.burnAt > 0) && o.group.position.distanceTo(e.group.position) < 2) o.burnAt = t + 1.5; e.burnAt = -1; hit(e, 'pyro', t, UP, { damage: 1, noBurn: true }); } return n ? 'every fire spreads and bursts' : 'nothing is burning'; } },
+  aqua:   { name: 'Tide Call',  go: (t) => { for (const sc of sources) cast('aqua', 'lift', { hand: sc.pos.clone(), dir: sc.normal.clone(), eye: sc.pos.clone().addScaledVector(sc.normal, -0.5), fwd: new THREE.Vector3(0, 0, -1), t, quiet: true }); water.amount = WATER_MAX; return sources.length ? 'every source erupts' : 'filled from the air'; } },
+  terra:  { name: 'Upheaval',   go: (t) => { let n = 0; const prey = liveEchoes(); for (const o of objects) { if (o.dead || o.held || o.def.cloud || !prey.length) continue; const e = prey[n++ % prey.length]; const d = e.group.position.clone().sub(o.pos); turn(o); kick(o, d.x * 2.2, 3 + d.y * 2, d.z * 2.2); } thump(); return n ? 'everything loose takes off' : 'nothing loose'; } },
+  aero:   { name: 'Eye of the Storm', go: (t) => { stormUntil = t + 6; return 'nothing thrown can reach you'; } },
+  lumen:  { name: 'Flashbang',  go: (t) => { pulseUniforms.uAmbient.value.setRGB(0.9, 0.85, 0.7); let n = 0; for (const e of liveEchoes()) if (lineOfSight(viewerPos, e.group.position)) { n++; e.blindUntil = t + 3.5; e.exposedUntil = t + 8; reveal(e, t, 8, ELEMENTS.lumen.color); } return n + ' blinded'; } },
+  gravis: { name: 'Reverse',    go: (t) => { for (const e of liveEchoes()) { if (!(KINDS[e.kind] || {}).heavy) { e.airborne = true; e.vel.y = 2.6; } e.dropAt = t + 1.4; reveal(e, t, 3, ELEMENTS.gravis.color); } for (const o of objects) if (!o.dead && !o.held && !o.def.cloud) kick(o, 0, 5, 0); return 'everything falls up'; } },
+  flora:  { name: 'Bloom',      go: (t) => { let n = 0; for (const e of liveEchoes()) if (e.rootedUntil > t) { n++; puff('flora', e.group.position, 40, 2.6, { up: 1 }); hit(e, 'flora', t, UP, { damage: 2, bleed: true }); } for (const tu of turrets) { tu.until += 10; tu.spitAt = 0; } return n ? n + ' rooted things burst' : turrets.length ? 'the snappers wake' : 'nothing rooted'; } },
+  astra:  { name: 'Alignment',  go: (t) => { let n = 0; for (const e of liveEchoes()) if (e.revealedUntil > t) { n++; const at = e.group.position.clone(), top = at.clone().setY(Math.min(at.y + 2.6, roomBounds().max.y - 0.2)); castBolt('astra', { ...MOVES.astra.punch, sky: false }, { hand: top, dir: at.sub(top).normalize(), eye: viewerPos.clone(), fwd: new THREE.Vector3(0, 0, -1), t, scale: 1 }); } return n ? 'a comet for each one you can see' : 'reveal something first'; } },
+  morph:  { name: 'Second Skin', go: (t) => { if (playerHP < 5) playerHP++; armour(t, 6); return 'healed, armoured'; } },
+  umbra:  { name: 'Lights Out', go: (t) => { for (const e of liveEchoes()) { e.blindUntil = t + 6; e.drainAt = t + 1.5; } pulseUniforms.uAmbient.value.setRGB(0, 0, 0); return 'nothing can see'; } },
+  necro:  { name: 'Detonate',   go: (t) => { if (!thralls.length) { raiseThrall(viewerPos.clone().add(new THREE.Vector3(0, -0.2, -0.8)), t); return 'one rises'; } for (const th of thralls) { explode(th.pos.clone(), 'necro', 1.3, t, 2, true); th.until = 0; } return 'the dead go off'; } },
+};
+let stormUntil = -1;
+function resonate(key, t) {
+  if (t - sealAt < SEAL_COOLDOWN) { hudNote = `seal in ${Math.ceil(SEAL_COOLDOWN - (t - sealAt))}s`; lastCast = key; drawHud(); return false; }
+  sealAt = t;
+  play(SFX.seal); castSound[key]();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), glowMat(ELEMENTS[key].color.clone(), 0.9));
+  ring.position.copy(viewerPos).setY(viewerPos.y - 0.5); ring.rotation.x = -Math.PI / 2;
+  addEffect([ring], (n) => { const k = (n - t) / 0.8; ring.scale.setScalar(0.2 + k * 6); ring.material.opacity = 0.9 * (1 - k); return k < 1; });
+  const said = SEALS[key].go(t);
+  hudNote = `${SEALS[key].name.toLowerCase()}: ${said}`; lastCast = key; drawHud();
+  return true;
+}
+function updateStorm(t) {                           // Aero's seal: for six seconds a wall of wind turns everything back
+  if (t > stormUntil) return;
+  if (Math.random() < 0.8) { const a = Math.random() * 6.28; particles.emit(_np.set(Math.cos(a) * 1.1, (Math.random() - 0.6) * 1.2, Math.sin(a) * 1.1).add(viewerPos), _nt.set(-Math.sin(a) * 4, 0.3, Math.cos(a) * 4), PCOL.aero[1], 0.02, 0.35, 0, 0); }
+  for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(viewerPos) < 1.5) { turn(o); sendBack(o, 11); tick(); }
 }
 
 // ---------- guard ----------
@@ -3788,7 +3959,7 @@ const _near = { dist: 0, i: 0, point: new THREE.Vector3(), tan: new THREE.Vector
 // --- Aqua: the stream ---
 const STREAM_N = 16, LASH_SPEED = 3.5;
 const streamMats = {
-  water: waterMat({ flow: [0, 3, 0], scale: [8, 3, 8], amp: 0, body: 0.3 }),
+  water: waterMat({ flow: [0, 3, 0], scale: [8, 3, 8], amp: 0.006, body: 0.3 }),
   ice: iceMat(),
   steam: waterMat({ flow: [0, 2, 0], scale: [5, 5, 5], amp: 0, body: 0.05 }),
   flesh: energyMat('morph', { scale: [18, 18, 18], flow: [0, 0.6, 0], cut: 0.08 }),
@@ -4759,7 +4930,7 @@ function selectElement(key, quiet) {
   for (const el of chipEls) el.classList.toggle('on', el.dataset.el === key);
   for (const el of moveEls) {
     const g = el.dataset.g;
-    el.textContent = g === 'sense' ? ELEMENTS[key].sense : g === 'draw' ? DRAWN[key] : MOVES[key][g].name;
+    el.textContent = g === 'sense' ? ELEMENTS[key].sense : g === 'draw' ? DRAWN[key] : g === 'seal' ? SEALS[key].name : MOVES[key][g].name;
     el.style.setProperty('--c', `#${ELEMENTS[key].color.getHexString()}`);
   }
   if (!quiet) { tick(); hudNote = `${ELEMENTS[key].label.toLowerCase()} ready`; }
@@ -4944,7 +5115,7 @@ function newHand() {
     pinkyBase: new THREE.Vector3(), indexTip: new THREE.Vector3(), hasTip: false,
     point: false, pointDir: new THREE.Vector3(),
     thumbTip: new THREE.Vector3(), pinchPos: new THREE.Vector3(), pinch: false, wasPinch: false,
-    midTip: new THREE.Vector3(), ringTip: new THREE.Vector3(), midPinch: false, ringPinch: false, quickT: -9,
+    midTip: new THREE.Vector3(), ringTip: new THREE.Vector3(), pinkyTip: new THREE.Vector3(), midPinch: false, ringPinch: false, quickT: -9, seal: false, sealT: 0, sealArmed: true,
     prev: new THREE.Vector3(), vel: new THREE.Vector3(),
   };
 }
@@ -5036,6 +5207,10 @@ function readHand(frame, source, refSpace, st, dt) {
     const mid = jointPos(frame, hand, 'middle-finger-tip', refSpace, st.midTip) ? st.thumbTip.distanceTo(st.midTip) : 9;
     const ring = jointPos(frame, hand, 'ring-finger-tip', refSpace, st.ringTip) ? st.thumbTip.distanceTo(st.ringTip) : 9;
     st.midEdge = false; st.ringEdge = false;
+    // The seal: index and middle straight, ring and little finger folded.
+    const far = (v) => v.distanceTo(st.wrist) / reach;
+    st.seal = jointPos(frame, hand, 'pinky-finger-tip', refSpace, st.pinkyTip) && mid < 9 && ring < 9
+      && far(st.indexTip) > 1.55 && far(st.midTip) > 1.55 && far(st.ringTip) < 1.25 && far(st.pinkyTip) < 1.25 && gap > 0.03;
     if (mid > 0.045) st.midPinch = false; else if (mid < 0.018 && openHand && !st.midPinch && ring > 0.03) { st.midPinch = true; st.midEdge = true; }
     if (ring > 0.045) st.ringPinch = false; else if (ring < 0.018 && openHand && !st.ringPinch && mid > 0.03) { st.ringPinch = true; st.ringEdge = true; }
   } else st.pinch = false;
@@ -5060,7 +5235,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 11. open palm toward you: pick'; drawHud(); }
+  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 12. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;
@@ -5143,6 +5318,12 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
   }
   for (const st of [L, R]) {
     if (!st.valid || st === menuHand || guard.on) continue;
+    if (st.seal && st.speed < 0.7 && st.palm.y > viewerPos.y - 0.55 && !st.hold) {
+      st.sealT += dt; st.ready = false; st.charge = 0;
+      if (st.sealT > 0.35 && st.sealArmed) { st.sealArmed = false; noteGesture('seal'); resonate(selected, t); }
+      continue;
+    }
+    st.sealT = 0; if (!st.seal) st.sealArmed = true;
     if ((st.midEdge || st.ringEdge) && t - st.quickT > 0.5 && !st.hold && !(stream.on && stream.owner === st)) {
       st.quickT = t; st.ready = false;
       if (st.midEdge) { noteGesture('middle pinch'); const back = prevSelected; selectElement(back, true); play(SFX.swap); hudNote = `${ELEMENTS[selected].label.toLowerCase()} ready`; lastCast = selected; drawHud(); }
@@ -5357,6 +5538,7 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   const dir = aimPoint.clone().sub(hand).normalize();
   const fwd = flat(aim);
 
+  if (previewGesture === 'seal') { resonate(selected, t); return; }
   if (previewGesture === 'draw') {                 // press and drag: the pointer is the pinch
     previewAim.copy(aim);
     previewDraw.down = true;
@@ -5446,7 +5628,7 @@ window.addEventListener('keydown', (ev) => {
   if (ev.key === 'Tab') { ev.preventDefault(); selectElement(prevSelected, true); return; }
   const i = '1234567890-'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
-  const g = 'qwertyuiop'.indexOf(ev.key.toLowerCase());
+  const g = 'qwertyuiop['.indexOf(ev.key.toLowerCase());
   if (g >= 0) selectGesture(GESTURES[g]);
 });
 
@@ -5607,6 +5789,7 @@ renderer.setAnimationLoop((ms, frame) => {
   }
   updateGuard(t, dt);
   updateBlades(t, dt);
+  updateStorm(t);
   updateVoids(t);
   rain(t);
   updateStream(t, dt);
@@ -5633,7 +5816,7 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
-  mirrorLine, rift, implode, ELEMENT_ORDER, thralls, raiseThrall, familiars, summonFamiliar, get prevSelected() { return prevSelected; }, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
+  mirrorLine, rift, implode, ELEMENT_ORDER, SEALS, resonate, dressEcho, set sealAt(v) { sealAt = v; }, thralls, raiseThrall, familiars, summonFamiliar, get prevSelected() { return prevSelected; }, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
   stream, startStream, endStream, plantWall, currents, makeCurrent, bendCurrents, fireLine, raiseRidge, drawBegin, drawAdd, drawEnd,
   get streamCtl() { return streamCtl; }, set streamCtl(v) { streamCtl = v; if (!v) stream.seenT = -9; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, throwCharged, kick,

@@ -68,38 +68,38 @@ const GESTURES = ['sense', 'punch', 'shove', 'lift', 'sweep', 'slam', 'point', '
 const MOVES = {
   pyro: {
     punch: { name: 'Ember',       kind: 'bolt',   speed: 9,  radius: 0.22, shape: 'orb' },
-    shove: { name: 'Flame Burst', kind: 'cone',   range: 2.6, angle: 0.75 },
+    shove: { name: 'Flame Burst', kind: 'cone',   range: 4, angle: 0.7 },
     lift:  { name: 'Pyre',        kind: 'column', launch: true, radius: 0.35, top: 0.16, bottom: 0.2, sides: 12, flicker: true },
     sweep: { name: 'Fire Arc',    kind: 'bolt',   speed: 6,  radius: 0.5, shape: 'crescent', size: 0.5, pierce: true, life: 1.2 },
-    slam:  { name: 'Eruption',    kind: 'ring',   maxR: 2.2, height: 1.2 },
-    point: { name: 'Volt',        kind: 'beam',   range: 8, chain: 2, volt: true },
+    slam:  { name: 'Eruption',    kind: 'ring',   maxR: 3.6, height: 1.4 },
+    point: { name: 'Volt',        kind: 'beam',   range: 14, chain: 3, volt: true },
     grip:  { name: 'Fireball',    kind: 'bolt',   speed: 8, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.3, damage: 2, life: 2.2 },
   },
   aqua: {
     punch: { name: 'Jet',         kind: 'bolt',   speed: 12, radius: 0.18, shape: 'jet', pierce: true },
-    shove: { name: 'Breaker',     kind: 'wall',   ram: 3.5, width: 1.8, height: 1.1, passThrough: true },
+    shove: { name: 'Breaker',     kind: 'wall',   ram: 6, width: 2.2, height: 1.2, passThrough: true },
     lift:  { name: 'Geyser',      kind: 'column', launch: true, radius: 0.32, top: 0.1, bottom: 0.1, sides: 16 },
     sweep: { name: 'Riptide',     kind: 'bolt',   speed: 5,  radius: 0.22, shape: 'crescent', size: 0.16, pierce: true, homing: 7, life: 2.6 },
-    slam:  { name: 'Surge',       kind: 'ring',   maxR: 2.6, height: 0.9, launch: true },
+    slam:  { name: 'Surge',       kind: 'ring',   maxR: 4.2, height: 1.1, launch: true },
     point: { name: 'Frost Needle', kind: 'bolt',  speed: 14, radius: 0.2, shape: 'shard', freeze: true },
     grip:  { name: 'Puppetry',    kind: 'grip' },
   },
   terra: {
     punch: { name: 'Stone Shot',  kind: 'bolt',   speed: 8,  radius: 0.28, shape: 'rock', gravity: 2.5 },
-    shove: { name: 'Boulder',     kind: 'bolt',   speed: 3.5, radius: 0.5, shape: 'rock', size: 0.28, roll: true, pierce: true, life: 3 },
-    lift:  { name: 'Spire',       kind: 'column', launch: true, radius: 0.3, top: 0.03, bottom: 0.17, sides: 6, pulse: true },
-    sweep: { name: 'Rampart',     kind: 'wall',   ram: 2.5, width: 1.6, height: 1.4 },
-    slam:  { name: 'Fault Line',  kind: 'fault',  length: 4.5 },
+    shove: { name: 'Boulder',     kind: 'bolt',   speed: 4.5, radius: 0.55, shape: 'rock', size: 0.32, roll: true, pierce: true, life: 4 },
+    lift:  { name: 'Spire',       kind: 'column', launch: true, radius: 0.32, top: 0.03, bottom: 0.19, sides: 6, pulse: true, stand: 18 },
+    sweep: { name: 'Rampart',     kind: 'wall',   ram: 5, width: 1.8, height: 1.5, stand: 30 },
+    slam:  { name: 'Fault Line',  kind: 'fault',  length: 8 },
     point: { name: 'Ferro Disc',  kind: 'bolt',   speed: 10, radius: 0.25, shape: 'disc', bounces: 3, pierce: true, life: 2.5 },
     grip:  { name: 'Unearth',     kind: 'grip' },
   },
   aero: {
     punch: { name: 'Air Bullet',  kind: 'bolt',   speed: 16, radius: 0.2, shape: 'orb', size: 0.03, bounces: 2 },
-    shove: { name: 'Gust',        kind: 'cone',   range: 4.5, angle: 0.5 },
+    shove: { name: 'Gust',        kind: 'cone',   range: 7, angle: 0.5 },
     lift:  { name: 'Updraft',     kind: 'column', launch: true, radius: 0.5, top: 0.3, bottom: 0.22, sides: 20 },
     sweep: { name: 'Air Blade',   kind: 'bolt',   speed: 11, radius: 0.4, shape: 'crescent', size: 0.4, pierce: true },
-    slam:  { name: 'Shockwave',   kind: 'ring',   maxR: 3, height: 2 },
-    point: { name: 'Void',        kind: 'void',   radius: 1.3, range: 6 },
+    slam:  { name: 'Shockwave',   kind: 'ring',   maxR: 4.5, height: 2.2 },
+    point: { name: 'Void',        kind: 'void',   radius: 1.5, range: 10 },
     grip:  { name: 'Telekinesis', kind: 'grip' },
   },
 };
@@ -403,6 +403,27 @@ function nearestSurface(world) {
 // Planes are cheap to test, so they are the colliders whenever the headset provides them.
 // The dense room mesh is only used when there are no planes at all.
 const colliderList = [];
+// Things you built that stand in the room and block like the room does.
+//   struck(dir, key, t): called when one of your own moves hits it.  damage(t): called when something hostile does.
+const barriers = [];
+const barrierMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+function addBarrier(geometry, like, handlers) {
+  const collider = new THREE.Mesh(geometry, barrierMat);
+  collider.position.copy(like.position); collider.quaternion.copy(like.quaternion);
+  collider.updateMatrixWorld(true);
+  const b = { collider, alive: true, hp: 3, ...handlers };
+  collider.userData.barrier = b;
+  barriers.push(b);
+  return b;
+}
+function clearBarriers() { for (const b of [...barriers]) b.crumble(now()); }
+function removeBarrier(b) {
+  if (!b.alive) return;
+  b.alive = false;
+  b.collider.geometry.dispose();
+  const i = barriers.indexOf(b);
+  if (i >= 0) barriers.splice(i, 1);
+}
 function colliders() {
   colliderList.length = 0;
   if (renderer.xr.isPresenting) {
@@ -412,6 +433,7 @@ function colliders() {
   } else {
     for (const m of previewGroup.children) colliderList.push(m);
   }
+  for (const b of barriers) if (b.alive) colliderList.push(b.collider);     // walls and spires you raised
   return colliderList;
 }
 const rayC = new THREE.Raycaster();
@@ -429,7 +451,21 @@ function collide(a, b) {
   const normal = new THREE.Vector3(0, 1, 0);
   if (hit.face) normal.copy(hit.face.normal).applyMatrix3(_nm.getNormalMatrix(hit.object.matrixWorld)).normalize();
   if (normal.dot(_cd) > 0) normal.negate();
-  return { point: hit.point.clone(), normal };
+  return { point: hit.point.clone(), normal, object: hit.object };
+}
+// The closest piece of the room to a point, whatever it is: floor, wall, ceiling, table, something you built.
+const PROBE_DIRS = [];
+for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) if (x || y || z) PROBE_DIRS.push(new THREE.Vector3(x, y, z).normalize());
+const _pr = new THREE.Vector3();
+function nearestRoomSurface(p, maxDist) {
+  let best = p.y >= 0 && p.y < maxDist ? { point: new THREE.Vector3(p.x, 0, p.z), normal: new THREE.Vector3(0, 1, 0), dist: p.y } : null;
+  for (const d of PROBE_DIRS) {
+    const h = collide(p, _pr.copy(p).addScaledVector(d, maxDist));
+    if (!h) continue;
+    const dist = h.point.distanceTo(p);
+    if (!best || dist < best.dist) best = { point: h.point, normal: h.normal, dist };
+  }
+  return best;
 }
 const _eyeToEcho = new THREE.Vector3();
 function lineOfSight(from, to) {
@@ -497,14 +533,43 @@ function roomBounds() {
   return box;
 }
 
+// Where the player is standing when a round is laid out.
+function spawnEye() {
+  return renderer.xr.isPresenting ? viewerPos.clone() : new THREE.Vector3(0.4, 1.5, 2.2);
+}
+const _sa = new THREE.Vector3(), _sb = new THREE.Vector3();
+const SIDE_RAYS = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]].map(v => new THREE.Vector3(...v));
+// Is a ball of this radius at p in open air: not inside a wall, not inside or under furniture, and in plain view from eye?
+function isOpen(p, radius, eye, needFloorGap = true) {
+  for (const d of SIDE_RAYS) {
+    if (!needFloorGap && d.y < 0) continue;
+    if (collide(p, _sa.copy(p).addScaledVector(d, radius))) return false;
+  }
+  if (needFloorGap && p.y < radius) return false;
+  const above = collide(p, _sa.copy(p).setY(p.y + 1.2));           // a table top or couch seat overhead means we are inside it
+  if (above && above.point.y < 1.5) return false;
+  const below = collide(_sb.copy(p).setY(2.6), p);                   // anything between the ceiling and here means the same
+  if (below && below.point.y < 2.3 && below.point.y > p.y + radius) return false;
+  return lineOfSight(eye, p);
+}
+function openSpot(box, yMin, yMax, radius, eye, others = [], gap = 0) {
+  const p = new THREE.Vector3();
+  for (let i = 0; i < 60; i++) {
+    p.set(THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), THREE.MathUtils.lerp(yMin, yMax, Math.random()), THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()));
+    if (others.some(q => q.distanceTo(p) < gap)) continue;
+    if (isOpen(p, radius, eye)) return p;
+  }
+  // Nowhere clean: fall back to open air in front of the player.
+  return p.copy(eye).add(new THREE.Vector3((Math.random() - 0.5) * 1.6, -0.3 + Math.random() * 0.4, -1.2 - Math.random()));
+}
+
 function scatterEchoes() {
+  clearBarriers();
   const box = roomBounds();
+  const eye = spawnEye(), taken = [];
   for (const e of echoes) {
-    e.home.set(
-      THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()),
-      THREE.MathUtils.lerp(box.min.y, box.max.y, Math.random() * Math.random()),  // bias low: under and behind things
-      THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()),
-    );
+    e.home.copy(openSpot(box, 0.5, 1.7, 0.3, eye, taken, 0.7));
+    taken.push(e.home.clone());
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;
     e.hp = 2; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
     e.burnAt = e.soakedUntil = e.frozenUntil = -1;
@@ -1016,7 +1081,7 @@ function castBolt(key, m, c) {
   const struck = new Set(), knocked = new Set();
   const stop = (point, t) => { if (m.blast) explode(point, key, m.blast, t, 1); return false; };
   let bounces = m.bounces || 0;
-  const born = c.t, life = m.life || 1.8;
+  const born = c.t, life = m.life || 2.6;
   addEffect([mesh], (t, dt) => {
     if (m.homing) {                               // bend toward the nearest revealed echo ahead
       dirN.copy(vel).normalize();
@@ -1039,6 +1104,11 @@ function castBolt(key, m, c) {
 
     const wall = collide(prev, mesh.position);
     let end = null;                               // where this step's travel stops, if it hits the room
+    if (wall && wall.object.userData.barrier && !c.hostile) {
+      wall.object.userData.barrier.struck(dirN.copy(vel).normalize(), key, t);
+      impact(wall.point, wall.normal, key, t, 0.3);
+      return stop(wall.point.clone(), t);
+    }
     if (wall) {
       end = wall.point;
       if (bounces > 0) {
@@ -1092,6 +1162,10 @@ function castCone(key, m, c) {
     _to.copy(e.group.position).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, e.group.position)) hit(e, key, c.t, d, m);
   }
+  for (const b of [...barriers]) {                // a shove sends a standing wall on its way
+    _to.copy(b.collider.position).setY(origin.y).sub(origin);
+    if (_to.length() < 2.6 && _to.angleTo(d) < m.angle + 0.4) b.struck(d, key, c.t);
+  }
   for (const o of objects) {
     if (o.dead || o.held) continue;
     _to.copy(o.pos).sub(origin);
@@ -1139,9 +1213,17 @@ function castColumn(key, m, c) {
   const color = ELEMENTS[key].color;
   const d = c.dir.clone().normalize();
   const target = aimAssist(c.eye, d, 0.6, c.t);
-  const base = new THREE.Vector3();
+  const base = new THREE.Vector3(), axis = new THREE.Vector3(0, 1, 0);
   let height = 1.0;
-  if (target) {
+  if (key === 'terra') {
+    // Stone answers from whatever is closest: the floor, a wall beside the target, the ceiling over it, a table.
+    const near = target ? nearestRoomSurface(target.group.position, 2.4) : null;
+    const look = !target ? collide(c.eye, c.eye.clone().addScaledVector(d, 12)) : null;
+    if (near) { base.copy(near.point); axis.copy(near.normal); height = near.dist + 0.2; }
+    else if (target) { base.set(target.group.position.x, 0, target.group.position.z); height = target.group.position.y + 0.18; }
+    else if (look) { base.copy(look.point); axis.copy(look.normal); height = 1.1; }
+    else base.copy(c.eye).addScaledVector(flat(d, c.fwd), 1.5).setY(0);
+  } else if (target) {
     base.set(target.group.position.x, 0, target.group.position.z);
     height = target.group.position.y + 0.18;
   } else {
@@ -1175,8 +1257,24 @@ function castColumn(key, m, c) {
   }
   const solid = body, wire = core || body;       // faded together below
   column.position.copy(base);
-  column.rotation.y = Math.random() * Math.PI;
+  column.quaternion.setFromUnitVectors(UP, axis);
+  column.rotateY(Math.random() * Math.PI);
   const pw = m.power || 1;
+  const upright = axis.y > 0.7;
+  // A stone spire stays where it grew, as cover, until it is broken or its time runs out.
+  let barrier = null, endAt = c.t + 0.75;
+  const crumble = (when) => {
+    if (!barrier) return;
+    removeBarrier(barrier); barrier = null;
+    endAt = when;
+    puff('terra', base.clone().addScaledVector(axis, height * 0.5), 30, 2.4, { jitter: 0.3 });
+  };
+  const _rel = new THREE.Vector3();
+  const inside = (p, pad) => {                   // is a point within the column, measured along its own axis?
+    _rel.copy(p).sub(base);
+    const along = _rel.dot(axis);
+    return along > -0.2 && along < height + 0.1 && _rel.addScaledVector(axis, -along).length() < m.radius * pw + pad;
+  };
   column.scale.set(pw, 0.001, pw);
   if (m.pulse) firePulse(base);                  // Terra's eruption also ripples the room
   puff(key, base, key === 'terra' ? 40 : 24, 2.4, { up: 2.5, jitter: 0.2 });
@@ -1186,7 +1284,8 @@ function castColumn(key, m, c) {
   addEffect([column], (t, dt) => {
     const age = t - born;
     const rise = Math.min(age / 0.16, 1);
-    const sink = THREE.MathUtils.clamp((age - 0.75) / 0.35, 0, 1);
+    if (barrier && t > endAt) crumble(t);
+    const sink = barrier ? 0 : THREE.MathUtils.clamp((t - endAt) / 0.35, 0, 1);
     column.scale.y = Math.max(height * rise * (1 - sink), 0.001);
     if (m.flicker) { const f = 1 + 0.18 * Math.sin(t * 31); column.scale.x = f * pw; column.scale.z = (2 - f) * pw; }
     solid.material.opacity = 1 - sink;
@@ -1207,18 +1306,23 @@ function castColumn(key, m, c) {
     }
     if (!struck && rise >= 1) {
       struck = true;
-      for (const e of echoes) {
-        if (!isLive(e, t)) continue;
-        const p = e.group.position;
-        if (Math.hypot(p.x - base.x, p.z - base.z) < m.radius && p.y < height + 0.1) hit(e, key, t, UP, m);
-      }
+      const mm = upright ? m : { ...m, launch: false };      // only a spire from below tosses things into the air
+      for (const e of echoes) if (isLive(e, t) && inside(e.group.position, 0)) hit(e, key, t, axis, mm);
       for (const o of objects) {
-        if (o.dead || o.held || Math.hypot(o.pos.x - base.x, o.pos.z - base.z) > m.radius + o.def.r) continue;
-        kick(o, 0, 6, 0);
+        if (o.dead || o.held || !inside(o.pos, o.def.r)) continue;
+        kick(o, axis.x * 6, axis.y * 6, axis.z * 6);
         if (key === 'pyro') ignite(o, t);
       }
+      if (m.stand && key === 'terra') {
+        endAt = t + m.stand;
+        barrier = addBarrier(new THREE.CylinderGeometry(m.bottom * 0.5 * pw, m.bottom * pw, height, 8).translate(0, height / 2, 0), column, {
+          struck: (dv, k, tt) => crumble(tt),
+          crumble: (tt) => crumble(tt),
+          damage: (tt) => { if (barrier && --barrier.hp <= 0) crumble(tt); },
+        });
+      }
     }
-    return age < 1.1;
+    return barrier || t < endAt + 0.35;
   });
 }
 
@@ -1282,7 +1386,7 @@ function castWall(key, m, c) {
   const color = ELEMENTS[key].color;
   const d = flat(c.dir, c.fwd);
   const right = new THREE.Vector3(-d.z, 0, d.x);
-  const centre = c.eye.clone().addScaledVector(d, 1.0).setY(0);
+  const centre = c.eye.clone().addScaledVector(d, m.passThrough ? 1.0 : 1.3).setY(0);
   const wall = new THREE.Group();
   if (m.passThrough) {
     // A breaking wave: a sheet that leans forward and curls over at the lip.
@@ -1309,15 +1413,50 @@ function castWall(key, m, c) {
   const born = c.t;
   const probeA = new THREE.Vector3(), probeB = new THREE.Vector3();
   let travelled = 0, stoppedAt = -1;
+  // Stone stands where it rose and blocks like the room does. Hit it with one of your own moves and it charges.
+  // Water never stands: a wave rolls out straight away.
+  let phase = 'rise', barrier = null, standUntil = 0;
+  const launch = (toward, t) => {
+    if (phase !== 'stand') return;
+    phase = 'ram';
+    d.copy(flat(toward, d)); right.set(-d.z, 0, d.x);
+    wall.rotation.y = Math.atan2(d.x, d.z);
+    removeBarrier(barrier); barrier = null;
+    struck.clear();
+    thump(); hudNote = 'rampart away'; drawHud();
+  };
+  const crumble = (t) => {
+    if (phase !== 'stand') return;
+    phase = 'done'; stoppedAt = t;
+    removeBarrier(barrier); barrier = null;
+    puff(key, wall.position.clone().setY(m.height * 0.5), 40, 2.6, { jitter: m.width * 0.6 });
+  };
   addEffect([wall], (t, dt) => {
     const age = t - born;
     const rise = Math.min(age / 0.18, 1);
     let step = 0;
-    if (rise >= 1 && stoppedAt < 0) {
-      step = 4 * dt;
+    if (phase === 'rise' && rise >= 1) {
+      if (m.stand) {
+        phase = 'stand'; standUntil = t + m.stand;
+        barrier = addBarrier(new THREE.BoxGeometry(m.width, m.height, 0.24).translate(0, m.height / 2, 0), wall, {
+          struck: (dv, k, tt) => launch(dv, tt),
+          crumble: (tt) => crumble(tt),
+          damage: (tt) => { puff(key, wall.position.clone().setY(m.height * 0.6), 14, 2, { jitter: m.width * 0.5 }); if (barrier && --barrier.hp <= 0) crumble(tt); },
+        });
+        // Whatever was standing where it came up gets thrown.
+        for (const e of echoes) {
+          if (!isLive(e, t)) continue;
+          _to.copy(e.group.position).sub(wall.position);
+          if (Math.abs(_to.dot(d)) < 0.3 && Math.abs(_to.dot(right)) < m.width / 2 && e.group.position.y < m.height + 0.1) hit(e, key, t, UP, { ...m, kind: 'column', launch: true });
+        }
+      } else phase = 'ram';
+    }
+    if (phase === 'stand' && t > standUntil) crumble(t);
+    if (phase === 'ram' && stoppedAt < 0) {
+      step = 5 * dt;
       if (!m.passThrough) {
         probeA.copy(wall.position).setY(0.4);
-        probeB.copy(probeA).addScaledVector(d, step + 0.1);
+        probeB.copy(probeA).addScaledVector(d, step + 0.15);
         const blocked = collide(probeA, probeB);
         if (blocked) { step = 0; stoppedAt = t; impact(blocked.point, blocked.normal, key, t, 0.5); }
       }
@@ -1329,8 +1468,6 @@ function castWall(key, m, c) {
         puff(key, foam, m.passThrough ? 2 : 1, 1, { up: m.passThrough ? 0.9 : 1.2 });
       }
       if (travelled >= m.ram && stoppedAt < 0) stoppedAt = t;
-    }
-    if (rise >= 1) {
       for (const e of echoes) {
         if (!isLive(e, t) || struck.has(e)) continue;
         _to.copy(e.group.position).sub(wall.position);
@@ -1343,7 +1480,7 @@ function castWall(key, m, c) {
         if (o.dead || o.held) continue;
         _to.copy(o.pos).sub(wall.position);
         if (Math.abs(_to.dot(d)) < 0.35 + step && Math.abs(_to.dot(right)) < m.width / 2 && o.pos.y < m.height) {
-          o.vel.x = d.x * 4.5; o.vel.z = d.z * 4.5; o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false;
+          o.vel.x = d.x * 5.5; o.vel.z = d.z * 5.5; o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false;
         }
       }
     }
@@ -1596,7 +1733,12 @@ const OBJ = {
   keg:   { r: 0.2,  mass: 1.2, bounce: 0.3,  key: 'pyro',  explodes: true },             // goes off when lit or hit hard
   stone: { r: 0.2,  mass: 2.5, bounce: 0.2,  key: 'terra', earth: true },                // heavy
   ball:  { r: 0.13, mass: 2,   bounce: 0.6,  key: 'terra', earth: true },                // steel: heavy and lively
+  bigcrate: { r: 0.36, mass: 3, bounce: 0.25, key: 'aero',  burns: true },               // a shipping crate
+  boulder:  { r: 0.42, mass: 6, bounce: 0.15, key: 'terra', earth: true },               // takes real effort to move
+  anvil:    { r: 0.22, mass: 5, bounce: 0.25, key: 'terra', earth: true },               // a block of iron
 };
+const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
+const MAX_OBJECTS = 24;
 const GRIP = { aero: 'Telekinesis', aqua: 'Puppetry', terra: 'Unearth', pyro: 'Fireball' };
 const objects = [];
 const objGroup = new THREE.Group();
@@ -1606,10 +1748,13 @@ function objectMesh(kind) {
   if (kind === 'crate') return new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.32, 3, 3, 3), stoneMat(false, { dark: 0x2b1708, light: 0x8f5c2a, seam: 0x1a0d04, amt: 0.9, grain: [1.5, 22, 1.5] }));
   if (kind === 'keg') return new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.36, 12, 3), stoneMat(false, { dark: 0x3a0a06, light: 0xc22d18, seam: 0xffc21a, amt: 0.9, grain: [3, 9, 3] }));
   if (kind === 'ball') return new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 2), stoneMat(true));
+  if (kind === 'bigcrate') return new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.58, 0.58, 4, 4, 4), stoneMat(false, { dark: 0x24140a, light: 0x7a5228, seam: 0x140a03, amt: 0.9, grain: [1.2, 16, 1.2] }));
+  if (kind === 'boulder') return new THREE.Mesh(craggy(new THREE.IcosahedronGeometry(0.42, 2), 0.13), stoneMat());
+  if (kind === 'anvil') return new THREE.Mesh(craggy(new THREE.BoxGeometry(0.36, 0.26, 0.26, 3, 2, 2), 0.02), stoneMat(true));
   return new THREE.Mesh(craggy(new THREE.DodecahedronGeometry(0.2, 1), 0.07), stoneMat());
 }
 function spawnObject(kind, pos) {
-  if (objects.filter(o => !o.dead).length >= 14) {         // keep the room from filling up: retire the oldest loose one
+  if (objects.filter(o => !o.dead).length >= MAX_OBJECTS) {         // keep the room from filling up: retire the oldest loose one
     const old = objects.find(o => !o.dead && !o.held);
     if (old) old.dead = true;
   }
@@ -1632,13 +1777,24 @@ function scatterObjects() {
   for (const o of objects) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); }
   objects.length = 0;
   const box = roomBounds();
-  const top = new THREE.Vector3(), bottom = new THREE.Vector3();
-  for (const kind of ['crate', 'crate', 'keg', 'stone', 'stone', 'ball']) {
-    // Drop a line from head height: the object starts on whatever it lands on, table, couch or floor.
-    top.set(THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), 1.9, THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()));
-    const under = collide(top, bottom.copy(top).setY(-0.05));
-    const y = under && under.normal.y > 0.7 ? under.point.y : 0;
-    spawnObject(kind, new THREE.Vector3(top.x, y + OBJ[kind].r, top.z)).rest = true;
+  const eye = spawnEye(), taken = [];
+  const top = new THREE.Vector3(), bottom = new THREE.Vector3(), at = new THREE.Vector3();
+  for (const kind of ROUND_OBJECTS) {
+    const r = OBJ[kind].r;
+    let placed = false;
+    for (let i = 0; i < 40 && !placed; i++) {
+      // Drop a line from head height: the object starts on whatever it lands on, table, couch or floor,
+      // but only where it has room, is not jammed into a wall or another object, and can be seen.
+      top.set(THREE.MathUtils.lerp(box.min.x, box.max.x, Math.random()), 1.9, THREE.MathUtils.lerp(box.min.z, box.max.z, Math.random()));
+      const under = collide(top, bottom.copy(top).setY(-0.05));
+      const y = under && under.normal.y > 0.7 ? under.point.y : 0;
+      at.set(top.x, y + r + 0.01, top.z);
+      if (taken.some(q => q.distanceTo(at) < r + 0.5)) continue;
+      if (!isOpen(at, r + 0.08, eye, false)) continue;
+      spawnObject(kind, at.clone()).rest = true;
+      taken.push(at.clone());
+      placed = true;
+    }
   }
 }
 function ignite(o, t) {
@@ -1791,7 +1947,7 @@ function updateObjects(t, dt) {
 // Terra holds stone and steel, or tears a fresh boulder out of the floor. Pyro's version is a charged fireball.
 const _ga = new THREE.Vector3();
 function findGrabTarget(key, eye, dir, t) {
-  let best = null, bestAngle = 0.24;
+  let best = null, bestAngle = 0.28;
   if (key === 'aero' || key === 'terra') {
     for (const o of objects) {
       if (o.dead || o.held || (key === 'terra' && !o.def.earth)) continue;
@@ -1806,9 +1962,13 @@ function findGrabTarget(key, eye, dir, t) {
       if (a < bestAngle) { bestAngle = a; best = { type: 'echo', e, pos: e.group.position }; }
     }
   }
-  if (!best && key === 'terra' && dir.y < -0.15) {           // nothing to hold: aim at the floor and pull one out
-    const k = -eye.y / dir.y;
-    if (k > 0.6 && k < 4.5) best = { type: 'ground', pos: eye.clone().addScaledVector(dir, k) };
+  if (!best && key === 'terra') {                            // nothing to hold: pull a boulder out of whatever you are reaching at
+    const wall = collide(eye, eye.clone().addScaledVector(dir, 9));
+    if (wall && wall.point.distanceTo(eye) > 0.6) best = { type: 'ground', pos: wall.point, normal: wall.normal };
+    else if (dir.y < -0.15) {
+      const k = -eye.y / dir.y;
+      if (k > 0.6 && k < 9) best = { type: 'ground', pos: eye.clone().addScaledVector(dir, k), normal: UP.clone() };
+    }
   }
   return best;
 }
@@ -1816,8 +1976,8 @@ function findGrabTarget(key, eye, dir, t) {
 function beginHold(g, key, target, eye, t) {
   let type = target.type, obj = target.obj || null;
   if (type === 'ground') {
-    obj = spawnObject('stone', target.pos.clone().setY(0.05));
-    puff('terra', target.pos, 40, 2.6, { up: 2.5, jitter: 0.25 });
+    obj = spawnObject('stone', target.pos.clone().addScaledVector(target.normal || UP, 0.24));
+    puff('terra', target.pos, 40, 2.6, { dir: target.normal || UP, spread: 0.9, jitter: 0.25 });
     firePulse(target.pos);
     type = 'object';
   }
@@ -1834,7 +1994,7 @@ function updateHold(g, eye, dir, reach, input, t, dt) {
   const h = g.hold;
   if (!h) return;
   if ((h.obj && h.obj.dead) || (h.e && h.e.down)) { g.hold = null; return; }
-  const dist = THREE.MathUtils.clamp(h.dist * reach * reach, 0.5, 7);    // push your arm out and it goes further away
+  const dist = THREE.MathUtils.clamp(h.dist * reach * reach, 0.5, 12);    // push your arm out and it goes further away
   _want.copy(eye).addScaledVector(dir, dist);
   _want.y = Math.max(_want.y, 0.15);
   const at = h.obj ? h.obj.pos : h.e.group.position;
@@ -1845,7 +2005,7 @@ function updateHold(g, eye, dir, reach, input, t, dt) {
   if (h.obj) {
     const o = h.obj;
     o.rest = false;
-    o.vel.copy(_want).sub(o.pos).multiplyScalar(h.key === 'terra' ? 6 : 10).clampLength(0, 12);
+    o.vel.copy(_want).sub(o.pos).multiplyScalar((h.key === 'terra' ? 7 : 10) / Math.sqrt(o.def.mass)).clampLength(0, 12);   // heavy things lag behind the hand
     if (h.key === 'aero') {
       const a = t * 9;
       puff('aero', _thread.set(o.pos.x + Math.cos(a) * 0.3, o.pos.y + Math.sin(a * 0.7) * 0.2, o.pos.z + Math.sin(a) * 0.3), 1, 0.3, { life: 0.25 });
@@ -2598,6 +2758,7 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin,
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
+  barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers,
   setHold(h) { previewHold = h; },
   get down() { return downCount; },
   get selected() { return selected; },

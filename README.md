@@ -37,7 +37,16 @@ Each fills the whole room and tells you something different.
 
 **Twin casts.** The same move with both hands together comes out bigger and one point harder.
 
-**Earth from any surface.** Spire grows out of whichever surface is nearest its target: floor, wall, ceiling or table. Unearth pulls a boulder out of whatever you reach at.
+**Earth from any surface.** Spire grows out of whichever surface is nearest its target: floor, wall, ceiling or table. Fault Line runs across whatever surface your fist struck, wall or table included. Rampart rises where you are looking: on the floor or a table top it is a wall, and if you look along a wall of the room it juts out of that wall as a partition. Unearth pulls a boulder out of whatever you reach at.
+
+**Four kinds of earth.** Pick Terra again while it is already selected (poke its orb a second time) to step through them. Every Terra move is then made of that material.
+
+| Form | What changes |
+|---|---|
+| Rock | The default. Hits twice as hard as anything else. |
+| Sand | Light hits that blind for 3 s. Shots pass through creatures and leave a sand cloud where they land. Unearth pulls out a sand cloud to carry. |
+| Metal | Shots ricochet twice more. Whatever they hit conducts Volt like a soaked target. Walls and spires take six hits, and shards ring off them back at the sender. Unearth pulls out an anvil. |
+| Lava | Everything it hits burns. It lights crates and kegs, boils water sources to steam, and lights the room. Unearth pulls out molten rock. |
 
 **Defence.** A Spire stays where it grew for 18 s. A Rampart stands for 30 s and blocks like a real wall, for you as well as for them. Hit it with a punch or a shove and it charges in that direction.
 
@@ -67,6 +76,8 @@ Reach an open hand at something (a ring shows what you would take), close your f
 | Water source | Any fire | A steam cloud. It scalds creatures inside it. Gust blows it around; Wind Grip carries it. |
 | Stone or boulder | Any fire | Molten rock for 10 s. It leaves what it hits burning and sets light to what it touches. Steel goes red hot the same way. |
 | Stone or boulder | Crush with Wind Grip | A sand cloud. Creatures inside it are blinded: they stop moving and cannot attack. Terra can carry it. |
+
+**Light.** Fire, lava and lightning throw light on your real walls, floor and furniture: a warm pool under a Pyre, a flash across the room from an explosion or a Volt.
 
 Marks on creatures combine as before: soaked + Volt conducts, frozen + Terra shatters, airborne + Aero finishes, fire + water makes steam.
 

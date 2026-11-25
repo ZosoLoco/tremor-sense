@@ -36,7 +36,21 @@ import * as THREE from 'three';
 const PULSE_SPEED = 2.4;    // metres per second
 const PULSE_LIFE = 4.5;     // seconds
 const MAX_PULSES = 4;
-const ECHO_COUNT = 6;
+const ECHO_COUNT = 8;        // the most creatures a wave can field
+// Four kinds of creature, one leaning toward each discipline. Colour tells you which once you have sensed it.
+//   ember:  quick shots. Water hurts it double. Bursts into flame when it dies.
+//   drip:   always counts as soaked, so Volt goes straight through it and fire only makes steam. Leaves a water source.
+//   pebble: slow, three hits to kill, and its shards chew through walls twice as fast. Drops a stone.
+//   wisp:   fast and fragile: one hit, but hard to pin down. Dies in a gust that scatters loose objects.
+const KINDS = {
+  plain:  { hp: 2, speed: 0.7,  shot: 3.2, colour: 0xb6ff3c },
+  ember:  { hp: 2, speed: 0.8,  shot: 4.0, colour: 0xff7a2a, weak: 'aqua' },
+  drip:   { hp: 2, speed: 0.6,  shot: 2.8, colour: 0x8fd3e6, wet: true },
+  pebble: { hp: 3, speed: 0.45, shot: 3.0, colour: 0xd9b25a, heavy: true },
+  wisp:   { hp: 1, speed: 1.3,  shot: 4.4, colour: 0xeaf7ff },
+};
+for (const k of Object.values(KINDS)) k.colour = new THREE.Color(k.colour);
+const KIND_NAMES = ['ember', 'drip', 'pebble', 'wisp'];
 const REVEAL_TIME = 6;      // seconds an echo stays visible after a Terra or Aero sense
 const HOLD_REVEAL = 1.5;    // seconds an echo lingers after leaving an Aqua or Pyro sense
 const TOUCH_ON = 0.045;     // palm closer than this to a surface counts as a touch
@@ -634,15 +648,25 @@ function openSpot(box, yMin, yMax, radius, eye, others = [], gap = 0) {
   return p.copy(eye).add(new THREE.Vector3((Math.random() - 0.5) * 1.6, -0.3 + Math.random() * 0.4, -1.2 - Math.random()));
 }
 
-function scatterEchoes() {
-  clearBarriers();
+// Waves: each one fields one more creature (three to start, eight at most) and they attack a little more often.
+// Clear a wave and the next begins with the room as you left it. Go down and it is back to wave one, room reset.
+let wave = 1, activeCount = 3;
+function scatterEchoes(keepWorld = false) {
+  if (!keepWorld) clearBarriers();
   const box = roomBounds();
   const eye = spawnEye(), taken = [];
-  for (const e of echoes) {
+  activeCount = Math.min(2 + wave, ECHO_COUNT);
+  echoes.forEach((e, i) => {
+    if (i >= activeCount) {                          // not in this wave: parked out of the way
+      e.down = true; e.downT = -1; e.group.visible = false; e.home.set(0, -50, 0); e.windup = -1;
+      for (const bead of e.tail) bead.visible = false;
+      return;
+    }
+    e.kind = AI.kinds ? KIND_NAMES[(Math.random() * KIND_NAMES.length) | 0] : 'plain';
     e.home.copy(openSpot(box, 0.5, 1.7, 0.3, eye, taken, 0.7));
     taken.push(e.home.clone());
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;
-    e.hp = 2; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
+    e.hp = KINDS[e.kind].hp; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
     e.burnAt = e.soakedUntil = e.frozenUntil = e.metalUntil = e.blindUntil = -1;
     e.baseColor.copy(ACID); e.ice.visible = false; e.shell.scale.setScalar(1);
     e.goal.copy(e.home); e.goalUntil = 0; e.windup = -1; e.puppet = false; e.last.copy(e.home);
@@ -651,13 +675,16 @@ function scatterEchoes() {
     e.group.scale.setScalar(1);
     e.group.position.copy(e.home);
     e.group.visible = false;
-  }
+  });
   downCount = 0;
-  playerHP = MAX_HP;
   draftUntil = -1;
-  clearSources(); water.amount = 0;
   nextAttackAt = now() + CREATURE.firstAttack;
-  scatterObjects();
+  if (!keepWorld) {
+    playerHP = MAX_HP;
+    clearSources(); water.amount = 0;
+    scatterObjects();
+  } else if (objects.filter(o => !o.dead && !o.def.cloud && !o.hostile).length < 6) scatterObjects();   // running low: restock
+  hudNote = `wave ${wave}`;
   drawHud();
 }
 
@@ -666,7 +693,7 @@ const isLive = (e, t) => !e.down && e.revealedUntil > t;
 // Mark an echo as sensed. The colour tells you which sense found it.
 function reveal(e, t, duration, color) {
   if (e.down) return;
-  if (e.revealedUntil < t) { blip(); e.baseColor.copy(color); }
+  if (e.revealedUntil < t) { blip(); e.baseColor.copy(AI.kinds && e.kind !== 'plain' ? KINDS[e.kind].colour : color); }
   e.revealedUntil = Math.max(e.revealedUntil, t + duration);
 }
 
@@ -684,7 +711,25 @@ function defeat(e, elementKey, t, pushDir) {
   puff(elementKey, e.group.position, 26, 2.4, pushDir && pushDir.lengthSq() ? { dir: pushDir, spread: 1.1 } : {});
   hitSound();
   drawHud();
-  if (downCount === ECHO_COUNT) respawnAt = t + 3.5;
+  if (AI.kinds) deathEffect(e, t);
+  if (downCount === activeCount) { respawnAt = t + 3.5; hudNote = 'wave clear'; drawHud(); }
+}
+// What each kind leaves behind.
+function deathEffect(e, t) {
+  const p = e.group.position.clone();
+  if (e.kind === 'drip') {
+    const under = nearestRoomSurface(p, 3);
+    addSource(under ? under.point : p.clone().setY(0), under ? under.normal : UP, t, 20);
+  } else if (e.kind === 'ember') explode(p, 'pyro', 0.9, t, 1);
+  else if (e.kind === 'pebble') spawnObject('stone', p);
+  else if (e.kind === 'wisp') {
+    puff('aero', p, 40, 4, { life: 0.4 });
+    for (const o of objects) {
+      if (o.dead || o.held || o.pos.distanceTo(p) > 2) continue;
+      const away = o.pos.clone().sub(p).normalize();
+      kick(o, away.x * 4, 2, away.z * 4);
+    }
+  }
 }
 
 // Land an attack on an echo. m is the move (or a bare { damage } for knock-on effects).
@@ -694,8 +739,10 @@ function hit(e, key, t, dir, m = {}) {
   if (e.down) return;
   _hd.copy(dir || ZERO);
   const pos = _hp.copy(e.group.position);
-  const frozen = e.frozenUntil > t, soaked = e.soakedUntil > t;
+  const K = KINDS[e.kind] || KINDS.plain;
+  const frozen = e.frozenUntil > t, soaked = e.soakedUntil > t || !!K.wet;
   let dmg = m.damage ?? (key === 'terra' ? 2 : 1);
+  if (K.weak === key && !m.noBurn) dmg += 1;         // the thing it cannot stand
   let note = null, shatter = false;
 
   if (frozen && key === 'terra') { dmg = 9; shatter = true; note = 'shatter'; }
@@ -741,7 +788,7 @@ function hit(e, key, t, dir, m = {}) {
 // They drift around the room out of sight, and every few seconds one of them stops, swells, and spits a shard at you.
 // The shard is a real object: block it with a wall, knock it away, blow it back, or catch it and return it.
 const CREATURE = { speed: 0.7, firstAttack: 7, attackEvery: 4.2, windup: 0.9, shotSpeed: 3.2, sight: 11, maxShots: 2 };
-const AI = { on: true };
+const AI = { on: true, attacks: true, kinds: true };   // attacks off = calm mode; kinds off = every creature the same
 const HOSTILE = new THREE.Color(0xff2bd6);
 const MAX_HP = 5;
 let playerHP = MAX_HP, hurtT = -9, nextAttackAt = 0;
@@ -773,7 +820,7 @@ function creatureAI(e, t, dt, eye) {
   const dist = _cdir.length();
   if (dist < 1e-3) return;
   _cdir.divideScalar(dist);
-  const move = Math.min(CREATURE.speed * dt, dist);
+  const move = Math.min((KINDS[e.kind] || KINDS.plain).speed * dt, dist);
   if (collide(e.home, _cprobe.copy(e.home).addScaledVector(_cdir, move + 0.2))) { e.goalUntil = 0; return; }   // something new in the way
   e.home.addScaledVector(_cdir, move);
   e.restY = e.home.y;
@@ -782,16 +829,18 @@ function spit(e, eye, t) {
   const dir = eye.clone().sub(e.home).normalize();
   const o = spawnObject('shard', e.home.clone().addScaledVector(dir, 0.3));
   o.hostile = true; o.owner = e; o.born = t;
-  o.vel.copy(dir).multiplyScalar(CREATURE.shotSpeed);
+  const K = KINDS[e.kind] || KINDS.plain;
+  o.heavy = !!K.heavy;
+  o.vel.copy(dir).multiplyScalar(K.shot * (1 + 0.05 * (wave - 1)));
   tone(700, 240, 0.25, 0.14, 'sawtooth');
 }
 // Each frame: choose who attacks next.
 function directAttacks(t, eye) {
-  if (!AI.on || t < nextAttackAt) return;
-  if (objects.filter(o => o.hostile && !o.dead).length >= CREATURE.maxShots) return;
+  if (!AI.on || !AI.attacks || t < nextAttackAt) return;
+  if (objects.filter(o => o.hostile && !o.dead).length >= (wave >= 4 ? 3 : CREATURE.maxShots)) return;
   const able = echoes.filter(e => !e.down && e.windup < 0 && !(e.frozenUntil > t) && !(e.blindUntil > t) && !e.airborne && !e.puppet
     && e.home.distanceTo(eye) < CREATURE.sight && lineOfSight(e.home, eye));
-  nextAttackAt = t + CREATURE.attackEvery * (0.7 + Math.random() * 0.6);
+  nextAttackAt = t + Math.max(CREATURE.attackEvery - 0.3 * (wave - 1), 2) * (0.7 + Math.random() * 0.6);
   if (!able.length) return;
   const e = able[(Math.random() * able.length) | 0];
   e.windup = t + CREATURE.windup;
@@ -908,7 +957,11 @@ function updateEchoes(t, dt, viewerPos) {
   directAttacks(t, viewerPos);
   hurtShell.position.copy(viewerPos);
   hurtShell.material.opacity = Math.max(0.55 * (1 - (t - hurtT) / 0.5), 0);
-  if (respawnAt > 0 && t > respawnAt) { respawnAt = -1; scatterEchoes(); }
+  if (respawnAt > 0 && t > respawnAt) {
+    respawnAt = -1;
+    if (playerHP <= 0) { wave = 1; scatterEchoes(); }           // down: start over
+    else { wave++; scatterEchoes(true); }                         // cleared: next wave, same room
+  }
 }
 
 // Revealed echo closest to a direction, within maxAngle radians. Null if none.
@@ -1162,8 +1215,19 @@ const particles = makePool(2000, true);
 const smoke = makePool(600, false);
 const SMOKE = new THREE.Color(0x26221f), STEAM = new THREE.Color(0xe6ecee), DUST = new THREE.Color(0x9c8763), SAND = new THREE.Color(0xc9ad74);
 const _fv = new THREE.Vector3(), _fp = new THREE.Vector3();
+// How much loose matter to draw: 1 is everything. Drops when frames run long, climbs back when they do not.
+let detail = 1, frameAvg = 0.012, detailCheck = 0;
+function tuneDetail(t, dt) {
+  frameAvg += (dt - frameAvg) * 0.05;
+  if (t - detailCheck < 1) return;
+  detailCheck = t;
+  if (frameAvg > 0.0165) detail = Math.max(0.35, detail - 0.15);
+  else if (frameAvg < 0.0145) detail = Math.min(1, detail + 0.05);
+}
+const thinned = (n) => { const k = n * detail; return Math.floor(k) + (Math.random() < k % 1 ? 1 : 0); };
 // Soft puffs: smoke off a fire, dust off broken stone, steam, sand.
 function fume(color, point, n, o = {}) {
+  n = thinned(n);
   for (let i = 0; i < n; i++) {
     _fv.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(o.speed ?? 0.5);
     _fv.y += o.rise ?? 0.4;
@@ -1190,6 +1254,7 @@ const _pv = new THREE.Vector3(), _pp = new THREE.Vector3();
 // n particles from a point. dir + spread aims them; without dir they go every way.
 function puff(key, point, n, speed, o = {}) {
   const S = PSTYLE[key], C = PCOL[key];
+  n = thinned(n);
   for (let i = 0; i < n; i++) {
     _pv.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     if (o.dir) _pv.multiplyScalar(o.spread ?? 0.5).add(o.dir).normalize();
@@ -2041,6 +2106,7 @@ let hudNote = 'open palm toward you: pick';
 function cast(key, gesture, c) {
   let m = MOVES[key][gesture];
   if (!m) return;
+  noteGesture(`${gesture} > ${m.name}`);
   if (m.kind === 'grip') return;                    // holds are driven by beginHold / updateHold, not cast here
   if (key === 'terra' && terraForm !== 'rock') {      // the same move, made of something else
     m = { ...m, form: terraForm };
@@ -2316,7 +2382,7 @@ function updateObjects(t, dt) {
           tone(1800, 1200, 0.2, 0.15, 'triangle'); hudNote = 'rang off steel'; drawHud();
           continue;
         }
-        if (hitB) hitB.damage(t);
+        if (hitB) { hitB.damage(t); if (o.heavy) hitB.damage(t); }
         o.dead = true; tick();
         for (let k = 0; k < 14; k++) particles.emit(o.pos, _od.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3), HOSTILE, 0.03, 0.3, 4, 1);
       } else if (o.pos.distanceTo(viewerPos) < 0.3) { o.dead = true; playerHurt(t); }
@@ -2625,6 +2691,7 @@ function beginHold(g, key, target, eye, t) {
     pv: new THREE.Vector3(), lastSlam: -9, lastWring: -9, reach0: 1,
     wrap: key === 'aero' || key === 'aqua' ? makeWrap(key) : null };
   lastCast = key; castSound[key]();
+  noteGesture(`grip > ${GRIP[key]}`);
   hudNote = GRIP[key].toLowerCase(); drawHud();
 }
 const _want = new THREE.Vector3(), _hstep = new THREE.Vector3(), _hnext = new THREE.Vector3(), _thread = new THREE.Vector3();
@@ -2932,6 +2999,76 @@ const menuOrbs = ELEMENT_ORDER.map((key) => {
 });
 menuGroup.visible = false;
 scene.add(menuGroup);
+// Under the orbs: three switches.
+//   CALM  creatures still move, but stop attacking. For practising moves.
+//   READ  shows what the tracker thinks each hand is doing. For working out why a move will not fire.
+//   NEW   back to wave one with a fresh room.
+const options = { calm: false, read: false };
+const SWITCHES = ['CALM', 'READ', 'NEW'];
+const switchMeshes = SWITCHES.map((label, i) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 160; canvas.height = 80;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.036, 0.018), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  mesh.renderOrder = 25;
+  mesh.userData = { canvas, tex, label, i };
+  menuGroup.add(mesh);
+  return mesh;
+});
+function drawSwitch(mesh) {
+  const { canvas, tex, label, i } = mesh.userData;
+  const on = i === 0 ? options.calm : i === 1 ? options.read : false;
+  const c = canvas.getContext('2d');
+  c.clearRect(0, 0, 160, 80);
+  c.fillStyle = on ? '#b6ff3c' : 'rgba(5,7,5,0.85)';
+  c.strokeStyle = '#b6ff3c'; c.lineWidth = 4;
+  c.beginPath(); c.roundRect(4, 4, 152, 72, 22); c.fill(); c.stroke();
+  c.fillStyle = on ? '#050705' : '#b6ff3c';
+  c.font = '600 34px ui-monospace, Menlo, Consolas, monospace';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(label, 80, 42);
+  tex.needsUpdate = true;
+}
+switchMeshes.forEach(drawSwitch);
+function flipSwitch(i) {
+  tick();
+  if (i === 0) { options.calm = !options.calm; AI.attacks = !options.calm; hudNote = options.calm ? 'calm: no attacks' : 'attacks on'; }
+  else if (i === 1) { options.read = !options.read; hudNote = options.read ? 'hand readout on' : 'hand readout off'; }
+  else { wave = 1; scatterEchoes(); }
+  switchMeshes.forEach(drawSwitch);
+  for (const el of optionEls) el.classList.toggle('on', el.dataset.opt === 'calm' && options.calm);
+  drawHud();
+}
+// The readout: a small panel over the right wrist.
+const readCanvas = document.createElement('canvas');
+readCanvas.width = 640; readCanvas.height = 200;
+const readTex = new THREE.CanvasTexture(readCanvas);
+readTex.colorSpace = THREE.SRGBColorSpace;
+const readout = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.0625), new THREE.MeshBasicMaterial({ map: readTex, transparent: true, depthTest: false, depthWrite: false }));
+readout.renderOrder = 21; readout.visible = false;
+scene.add(readout);
+const gestureLog = { name: 'none', t: -99 };
+let readDrawn = -1;
+function noteGesture(name) { gestureLog.name = name; gestureLog.t = now(); }
+function drawReadout(L, R, t) {
+  if (t - readDrawn < 0.12) return;
+  readDrawn = t;
+  const c = readCanvas.getContext('2d');
+  c.clearRect(0, 0, 640, 200);
+  c.fillStyle = 'rgba(5,7,5,0.85)'; c.strokeStyle = '#cfd6d2'; c.lineWidth = 3;
+  c.beginPath(); c.roundRect(3, 3, 634, 194, 26); c.fill(); c.stroke();
+  c.font = '34px ui-monospace, Menlo, Consolas, monospace'; c.textBaseline = 'middle';
+  const line = (tag, st, y) => {
+    c.fillStyle = st.valid ? '#cfd6d2' : '#6f7a74';
+    c.fillText(st.valid ? `${tag} ${handShape(st).padEnd(5)} curl ${st.curl.toFixed(2)}  ${st.speed.toFixed(1)} m/s` : `${tag} not tracked`, 24, y);
+  };
+  line('L', L, 46); line('R', R, 100);
+  c.fillStyle = '#b6ff3c';
+  const age = t - gestureLog.t;
+  c.fillText(`last: ${gestureLog.name}${age < 60 ? `  ${age.toFixed(1)}s ago` : ''}`, 24, 156);
+  readTex.needsUpdate = true;
+}
 
 // ---------- wrist HUD ----------
 const hudCanvas = document.createElement('canvas');
@@ -2966,7 +3103,8 @@ function drawHud() {
   }
   c.fillStyle = '#b6ff3c';
   c.textAlign = 'right';
-  c.fillText(`${downCount}/${ECHO_COUNT}`, 478, 68);
+  c.font = '600 40px ui-monospace, Menlo, Consolas, monospace';
+  c.fillText(`w${wave} ${downCount}/${activeCount}`, 478, 66);
   for (let i = 0; i < MAX_HP; i++) {                // health pips
     c.beginPath(); c.arc(470 - i * 24, 138, 8, 0, Math.PI * 2);
     c.fillStyle = i < playerHP ? '#ff4d6a' : 'rgba(255,77,106,0.18)';
@@ -2975,10 +3113,10 @@ function drawHud() {
   c.textAlign = 'left';
   c.fillStyle = '#cfd6d2';
   c.font = '30px ui-monospace, Menlo, Consolas, monospace';
-  c.fillText(downCount === ECHO_COUNT ? 'room clear. resetting…' : hudNote, 36, 138);
+  c.fillText(hudNote, 36, 138);
   hudTex.needsUpdate = true;
   if (!renderer.xr.isPresenting) {
-    statusEl.textContent = `Echoes struck: ${downCount}/${ECHO_COUNT} · health ${playerHP}/${MAX_HP}` + (xrSupported ? '' : ' · preview mode');
+    statusEl.textContent = `Wave ${wave} · ${downCount}/${activeCount} down · health ${playerHP}/${MAX_HP}` + (xrSupported ? '' : ' · preview mode');
   }
 }
 
@@ -3115,12 +3253,19 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
         .addScaledVector(menuHand.across, (i - 1.5) * 0.042);
       if (pointer.valid && pointer.hasTip && pointer.indexTip.distanceTo(orb.position) < 0.03) touching = i;
     });
+    _off.subVectors(menuHand.wrist, menuHand.knuckle).normalize();          // toward the wrist: the second row sits below the orbs
+    switchMeshes.forEach((sw, i) => {
+      sw.position.copy(menuHand.palm).addScaledVector(menuHand.normal, 0.06).addScaledVector(_off, 0.042).addScaledVector(menuHand.across, (i - 1) * 0.046);
+      sw.lookAt(viewerPos);
+      if (pointer.valid && pointer.hasTip && pointer.indexTip.distanceTo(sw.position) < 0.022) touching = 4 + i;
+    });
     // A poke counts once: the finger has to come off the orbs before it can pick again.
     // Poking the discipline you are already in does nothing, except Terra, which steps to its next form.
     if (touching < 0) menuArmed = true;
     else if (menuArmed && t - lastMenuPick > 0.25) {
       menuArmed = false; lastMenuPick = t;
-      if (ELEMENT_ORDER[touching] !== selected || selected === 'terra') selectElement(ELEMENT_ORDER[touching]);
+      if (touching >= 4) flipSwitch(touching - 4);
+      else if (ELEMENT_ORDER[touching] !== selected || selected === 'terra') selectElement(ELEMENT_ORDER[touching]);
     }
   }
 
@@ -3131,6 +3276,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     else if (clapArmed && gap < CLAP_ON && !menuHand) {
       clapArmed = false;
       L.clapBlock = R.clapBlock = t;
+      noteGesture('clap');
       if (selected === 'aero') senseAero(_off.addVectors(L.palm, R.palm).multiplyScalar(0.5).clone(), t);
     }
   }
@@ -3152,6 +3298,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
         cast(selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: hitFist.point, normal: struckSurface ? struckSurface.normal : UP.clone(), t });
       } else if (!isFist && hitPalm.dist < TOUCH_ON) {
         st.armed = false; st.lastTouch = t; st.ready = false;
+        noteGesture('palm on surface');
         if (selected === 'terra') {
           firePulse(hitPalm.point);
           hudNote = ELEMENTS.terra.sense.toLowerCase(); lastCast = 'terra'; drawHud();
@@ -3236,6 +3383,14 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
   const lead = R.valid && R !== menuHand ? R : L.valid && L !== menuHand ? L : null;
   if (selected === 'aqua' && lead) waterAnchor.copy(lead.palm).addScaledVector(lead.normal, -0.06).add(_off.set(0, 0.16, 0));
   waterAnchorOn = selected === 'aqua' && !!lead;
+
+  readout.visible = options.read;
+  if (options.read) {
+    drawReadout(L, R, t);
+    if (R.valid) readout.position.copy(R.wrist).add(_off.set(0, 0.11, 0));
+    else { _off.set(0.22, -0.2, -0.55).applyQuaternion(viewerQuat); readout.position.copy(viewerPos).add(_off); }
+    readout.lookAt(viewerPos);
+  }
 
   // HUD rides the left wrist; it steps aside while the menu is up.
   hud.visible = !menuHand;
@@ -3360,6 +3515,8 @@ if (squeezeBtn) {
   squeezeBtn.addEventListener('pointerdown', () => { previewGrip.squeeze = true; });
   for (const name of ['pointerup', 'pointerleave', 'pointercancel']) squeezeBtn.addEventListener(name, () => { previewGrip.squeeze = false; });
 }
+const optionEls = Array.from(document.querySelectorAll('[data-opt]'));
+for (const el of optionEls) el.addEventListener('click', () => { ensureAudio(); flipSwitch(el.dataset.opt === 'calm' ? 0 : 2); });
 for (const el of chipEls) el.addEventListener('click', () => { ensureAudio(); selectElement(el.dataset.el); });
 for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); selectGesture(el.dataset.g); });
 window.addEventListener('keydown', (ev) => {
@@ -3414,6 +3571,7 @@ function onSessionEnd() {
   pulseUniforms.uBase.value = 0.1;
   uiEl.style.display = '';
   hud.visible = false;
+  readout.visible = false;
   enterBtn.disabled = false;
   scatterEchoes();
 }
@@ -3424,7 +3582,7 @@ if (navigator.xr && navigator.xr.isSessionSupported) {
     if (ok) {
       enterBtn.disabled = false;
       statusEl.textContent = 'Headset ready.';
-      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Both hands together cast a twin. To hold something, reach an open hand at it and close your fist; open to let go. Creatures shoot back: block with a Rampart, blow shards back with Gust, or catch them.';
+      hintEl.textContent = 'In the headset: turn an open palm toward your face and poke an orb to pick a discipline. Sense first (Terra: palm on a surface. Aero: clap. Aqua: hold a raised palm out. Pyro: hold a raised fist), then punch, shove, lift, sweep, jab with a pointed finger, or slam a fist on a surface. Both hands together cast a twin. To hold something, reach an open hand at it and close your fist; open to let go. Creatures shoot back: block with a Rampart, blow shards back with Gust, or catch them. Under the palm menu orbs: CALM stops them attacking, READ shows what the tracker sees your hands doing, NEW restarts.';
     } else {
       statusEl.textContent = 'No mixed reality here. Open this page in the Quest browser to play for real.';
     }
@@ -3503,6 +3661,7 @@ renderer.setAnimationLoop((ms, frame) => {
   updateHeldSenses(t);
   updateObjects(t, dt);
   updateEchoes(t, dt, viewerPos);
+  tuneDetail(t, dt);
   updateEffects(t, dt);
   updateLights(t);
   const layer = frame && renderer.xr.isPresenting ? frame.session.renderState.baseLayer : null;
@@ -3520,7 +3679,8 @@ window.__tremor = {
   get draftOn() { return now() < draftUntil; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, kick,
   barriers, isOpen, nearestRoomSurface, roomBounds, clearBarriers, AI, CREATURE, playerHurt, spit, sources, addSource, water,
-  cycleForm, get form() { return terraForm; }, setForm(f) { terraForm = f; }, lights,
+  cycleForm, get form() { return terraForm; }, setForm(f) { terraForm = f; }, lights, KINDS, options, flipSwitch,
+  get wave() { return wave; }, set wave(n) { wave = n; }, get active() { return activeCount; }, get detail() { return detail; },
   spawnCloud, smoke, ignite,
   get hp() { return playerHP; }, attackSoon() { nextAttackAt = 0; },
   setHold(h) { previewHold = h; },

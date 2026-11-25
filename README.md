@@ -229,3 +229,14 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
 - **Water.** The stream wobbles; every source ripples.
 - **Creatures have bodies** by kind: crawler legs, flyer wings that beat, brute horns and plates, frost crystals,
   shade hood and tatters, ember flames, drip, pebble lumps, wisp rings.
+
+## Build 13: what blasts and shockwaves are made of
+
+- **Shockwaves (slam).** Flora: roots break the floor outward. Necro: hands reach up. Morph: a crown of bone. Lumen:
+  shafts of light on the wave front. Astra: stars rain inside it. Gravis: a plate of weight comes down. Umbra: a dome
+  of night.
+- **Blasts (shove).** Aero: long curved streaks. Lumen: a fan of rays. Necro: rings of a wail. Gravis: fast pressure
+  rings. Astra: rain. Morph Carapace: plates of shell close in front of you.
+- **Glaive.** Holds itself toward where the hand points and sways, with vertebrae along it; it no longer hangs like
+  the water stream.
+- **Own sounds** for the Eclipse zone, snapper bite and spit, Spear Hand, light blade, and each familiar's shot.

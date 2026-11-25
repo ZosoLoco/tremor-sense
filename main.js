@@ -650,6 +650,12 @@ SFX.necro = {
 };
 SFX.summon = [['t', 262, 523, 0.5, 0.14, 'triangle'], ['t', 392, 784, 0.5, 0.1, 'triangle', 0.1], ['n', 'highpass', 3000, 6000, 0.5, 0.08, 0.7, 0.1, 0.2]];
 SFX.seal = [['t', 220, 880, 0.5, 0.16, 'triangle'], ['t', 330, 1320, 0.5, 0.1, 'triangle', 0.05], ['n', 'bandpass', 500, 4000, 0.5, 0.2, 2, 0, 0.3], ['t', 110, 55, 0.6, 0.35, 'sine', 0.45]];
+SFX.zone = [['t', 82, 41, 1.4, 0.3], ['t', 87, 43, 1.4, 0.28], ['n', 'lowpass', 300, 120, 1.4, 0.2, 1, 0, 0.5]];
+SFX.snap = [['n', 'bandpass', 1800, 700, 0.07, 0.45, 3, 0, 0.002], ['t', 240, 120, 0.09, 0.3, 'triangle'], ['n', 'highpass', 4000, 3000, 0.04, 0.2, 0.7, 0.05, 0.002]];
+SFX.spit = [['n', 'bandpass', 2600, 1200, 0.09, 0.25, 2, 0, 0.004], ['t', 520, 260, 0.08, 0.12, 'triangle']];
+SFX.lance = [['n', 'bandpass', 800, 3200, 0.07, 0.4, 2, 0, 0.003], ['t', 140, 420, 0.07, 0.3, 'square'], ['n', 'lowpass', 900, 250, 0.12, 0.35, 0.7, 0.07, 0.003]];
+SFX.blade = [['t', 1976, 2637, 0.25, 0.1, 'triangle'], ['t', 1318, 1318, 0.5, 0.06], ['n', 'highpass', 6000, 9000, 0.2, 0.08]];
+const FAMILIAR_NOTE = { pyro: 740, terra: 150, aero: 1500, lumen: 2093, gravis: 98, astra: 1175, umbra: 196 };
 SFX.swap = [['t', 600, 900, 0.07, 0.12, 'triangle']];
 SFX.guard = [['t', 300, 600, 0.15, 0.2, 'triangle'], ['n', 'bandpass', 1500, 2500, 0.2, 0.15, 3]];
 SFX.guardHit = [['t', 700, 500, 0.1, 0.2, 'triangle'], ['n', 'highpass', 4000, 3000, 0.06, 0.25, 0.7, 0, 0.002]];
@@ -2109,6 +2115,7 @@ function castCone(key, m, c) {
   const color = ELEMENTS[key].color;
   const d = c.dir.clone().normalize();
   const origin = c.hand.clone();
+  coneFlourish(key, m, origin, d, c.t);
   for (const e of echoes) {
     if (!isLive(e, c.t)) continue;
     _to.copy(e.group.position).sub(origin);
@@ -2307,6 +2314,7 @@ function castColumn(key, m, c) {
 function castRing(key, m, c) {
   const color = ELEMENTS[key].color;
   const centre = c.ground.clone();
+  ringFlourish(key, m, centre, c.t);
   const mk = (inner) => {
     const r = new THREE.Mesh(new THREE.RingGeometry(inner, 1, 72).rotateX(-Math.PI / 2), glowMat(color, 0.9));
     r.position.copy(centre).setY(centre.y + 0.02);
@@ -2714,6 +2722,7 @@ let stopNormal = null;
 // --- lance: not a projectile. The limb extends, runs everything in line through, and retracts.
 function castLance(key, m, c) {
   const d = c.dir.clone().normalize(), t = c.t;
+  play(SFX.lance);
   const wall = collide(c.hand, c.hand.clone().addScaledVector(d, m.range));
   const reach = wall ? wall.point.distanceTo(c.hand) : m.range;
   const tip = c.hand.clone().addScaledVector(d, reach);
@@ -2778,6 +2787,85 @@ function raiseThrall(pos, t) {
 function castLegion(key, m, c) {
   for (let i = 0; i < m.count; i++) raiseThrall(c.hand.clone().add(new THREE.Vector3(Math.cos(i * 2.1) * 0.5, 0.1, Math.sin(i * 2.1) * 0.5 - 0.4)), c.t + i * 0.001);
 }
+// ---------- what each discipline's blast and shockwave are actually made of ----------
+// Things that come up, stand a moment and go: roots, claws, spikes, shafts of light.
+function popUps(list, t) {
+  addEffect(list.map(p => p.mesh), (n) => {
+    let any = false;
+    for (const p of list) {
+      const a = n - t - p.at;
+      const k = a < 0 ? 0 : a < p.grow ? a / p.grow : a < p.grow + p.life ? 1 : Math.max(1 - (a - p.grow - p.life) / 0.25, 0);
+      p.mesh.visible = k > 0;
+      if (p.axis) p.mesh.scale.set(p.axis[0] ? Math.max(k, 0.01) : 1, p.axis[1] ? Math.max(k, 0.01) : 1, p.axis[2] ? Math.max(k, 0.01) : 1); else p.mesh.scale.setScalar(Math.max(k, 0.01));
+      if (p.mesh.material.transparent && p.fade) p.mesh.material.opacity = k * p.fade;
+      if (a < p.grow + p.life + 0.25) any = true;
+    }
+    return any;
+  });
+}
+const basic = (hex) => new THREE.MeshBasicMaterial({ color: hex });
+function ringFlourish(key, m, centre, t) {
+  const R = m.maxR, list = [], rnd = (i) => { const a = i * 2.399, r = R * Math.sqrt((i + 0.5) / 26); return [Math.cos(a) * r, Math.sin(a) * r, r]; };
+  if (key === 'flora') {                            // roots breaking the floor, outward
+    for (let i = 0; i < 26; i++) { const [x, z, r] = rnd(i); const root = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.3 + (i % 4) * 0.08, 5).translate(0, 0.17, 0), basic(i % 3 ? 0x3d8a22 : 0x7a5230)); root.position.set(centre.x + x, centre.y, centre.z + z); root.rotation.set((i % 5 - 2) * 0.2, i, (i % 3 - 1) * 0.3); list.push({ mesh: root, at: r / 5, grow: 0.12, life: 1.1, axis: [0, 1, 0] }); }
+  } else if (key === 'necro') {                     // hands
+    for (let i = 0; i < 14; i++) { const [x, z, r] = rnd(i * 2); const hand = new THREE.Group(); for (let f = -1; f <= 1; f++) hand.add(new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.16, 4).translate(f * 0.03, 0.3, 0).rotateZ(f * -0.25), basic(0xeafff4))); hand.add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.24, 5).translate(0, 0.12, 0), basic(0xeafff4))); hand.material = { transparent: false, dispose() {} }; hand.position.set(centre.x + x, centre.y, centre.z + z); hand.rotation.y = i; list.push({ mesh: hand, at: r / 5, grow: 0.18, life: 0.9, axis: [0, 1, 0] }); }
+  } else if (key === 'morph') {                     // a crown of bone thrown up round the foot
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 4).translate(0, 0.25, 0), basic(0xf0dccf)); spike.position.set(centre.x + Math.cos(a) * 0.8, centre.y, centre.z + Math.sin(a) * 0.8); spike.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6); list.push({ mesh: spike, at: 0.02 * (i % 3), grow: 0.07, life: 0.5, axis: [0, 1, 0] }); }
+  } else if (key === 'lumen') {                     // shafts of light standing on the wave front
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2, r = R * (0.35 + 0.65 * ((i * 7) % 16) / 16); const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.03, 2.2, 6).translate(0, 1.1, 0), glowMat(new THREE.Color(0xfff6d0), 0.8)); shaft.position.set(centre.x + Math.cos(a) * r, centre.y, centre.z + Math.sin(a) * r); list.push({ mesh: shaft, at: r / 5, grow: 0.05, life: 0.25, axis: [0, 1, 0], fade: 0.8 }); }
+  } else if (key === 'astra') {                     // it rains stars
+    for (let i = 0; i < 18; i++) { const [x, z, r] = rnd(i * 1.4); const streak = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.02, 2.4, 5).translate(0, 1.2, 0), glowMat(new THREE.Color(i % 3 ? 0xc9d6ff : 0xffffff), 0.9)); streak.position.set(centre.x + x, centre.y, centre.z + z); streak.rotation.z = 0.25; list.push({ mesh: streak, at: r / 5 + (i % 4) * 0.05, grow: 0.06, life: 0.08, axis: [0, 1, 0], fade: 0.9 }); }
+  } else if (key === 'gravis') {                    // a plate of weight coming down on everything
+    const press = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 0.04, 48, 1, true), glowMat(new THREE.Color(0xb48cff), 0.7));
+    const lid = new THREE.Mesh(new THREE.RingGeometry(0, R, 48).rotateX(Math.PI / 2), energyMat('gravis', { scale: [1.5, 1.5, 1.5], cut: 0.35 }));
+    press.add(lid);
+    addEffect([press], (n) => { const k = Math.min((n - t) / 0.3, 1); press.position.copy(centre).setY(centre.y + 1.8 * (1 - k * k)); press.material.opacity = lid.material.opacity = k < 1 ? 0.7 : Math.max(0.7 - (n - t - 0.3) * 2.5, 0); return n - t < 0.6; });
+  } else if (key === 'umbra') {                     // night, as a dome
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), energyMat('umbra', { scale: [2, 2, 2], flow: [0, 0.4, 0], cut: 0.1 }));
+    dome.position.copy(centre);
+    addEffect([dome], (n) => { const r = Math.min((n - t) * 5, R); dome.scale.setScalar(Math.max(r, 0.01)); dome.material.opacity = r < R ? 1 : Math.max(1 - (n - t - R / 5) * 1.6, 0); return n - t < R / 5 + 0.65; });
+  }
+  if (list.length) popUps(list, t);
+}
+// Rings that travel down the blast: a voice, a pressure wave, a gust.
+function waves(origin, d, count, range, radius, mat, t, gap = 0.09, speed = 9) {
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+  const rings = Array.from({ length: count }, (_, i) => { const r = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 6, 40), mat()); r.quaternion.copy(q); r.userData.at = i * gap; return r; });
+  addEffect(rings, (n) => {
+    let any = false;
+    for (const r of rings) { const a = n - t - r.userData.at, dist = a * speed; r.visible = a > 0 && dist < range; if (a * speed < range) any = true; if (!r.visible) continue; const k = dist / range; r.position.copy(origin).addScaledVector(d, dist); r.scale.setScalar(radius * (0.15 + k)); r.material.opacity = 1 - k; }
+    return any;
+  });
+}
+function coneFlourish(key, m, origin, d, t) {
+  const spread = Math.tan(m.angle) * m.range;
+  if (key === 'necro') waves(origin, d, 5, m.range, spread, () => glowMat(new THREE.Color(0x6cf0c2), 0.8), t, 0.11, 7);
+  else if (key === 'gravis') waves(origin, d, 3, m.range, spread, () => energyMat('gravis', { cut: 0.2 }), t, 0.05, 14);
+  else if (key === 'aero') {                        // wind: long curved streaks, not a cloud
+    const side = new THREE.Vector3(-d.z, 0, d.x).normalize(), list = [];
+    for (let i = 0; i < 9; i++) {
+      const off = new THREE.Vector3((Math.random() - 0.5), (Math.random() - 0.5), 0).multiplyScalar(spread * 0.9);
+      const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(off.x * 0.2, off.y * 0.2 + 0.25, m.range * 0.5), new THREE.Vector3(off.x, off.y, m.range * (0.7 + Math.random() * 0.3)));
+      const streak = new THREE.Mesh(new THREE.TubeGeometry(curve, 14, 0.008, 4, false), glowMat(new THREE.Color(0xffffff), 0.7));
+      streak.position.copy(origin); streak.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+      list.push({ mesh: streak, at: i * 0.02, grow: 0.14, life: 0.1, axis: [0, 0, 1], fade: 0.7 });
+    }
+    popUps(list, t);
+  } else if (key === 'lumen') {                     // a fan of hard rays
+    const list = [];
+    for (let i = 0; i < 9; i++) { const a = (i / 8 - 0.5) * 2 * m.angle; const ray = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, m.range).translate(0, 0, m.range / 2), glowMat(new THREE.Color(0xfff6d0), 0.9)); ray.position.copy(origin); ray.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.clone().applyAxisAngle(UP, a).normalize()); list.push({ mesh: ray, at: 0, grow: 0.04, life: 0.12, axis: [0, 0, 1], fade: 0.9 }); }
+    popUps(list, t);
+  } else if (key === 'morph' && m.armour) {         // plates of shell closing in front of you
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d), list = [];
+    for (let i = 0; i < 7; i++) { const a = (i / 6) * Math.PI * 2, r = i === 6 ? 0 : 0.2; const plate = new THREE.Mesh(new THREE.CircleGeometry(0.115, 6), new THREE.MeshBasicMaterial({ color: i === 6 ? 0xf0dccf : 0xd8a898, side: THREE.DoubleSide })); plate.quaternion.copy(q); plate.position.copy(origin).addScaledVector(d, 0.25).add(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0).applyQuaternion(q)); list.push({ mesh: plate, at: i * 0.03, grow: 0.08, life: 0.7 }); }
+    popUps(list, t);
+  } else if (key === 'astra') {                     // rain, straight down through the whole blast
+    const list = [];
+    for (let i = 0; i < 14; i++) { const p = origin.clone().addScaledVector(d, Math.random() * m.range).add(new THREE.Vector3((Math.random() - 0.5) * spread, 0, (Math.random() - 0.5) * spread)); const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.012, 0.9, 4), glowMat(new THREE.Color(0xc9d6ff), 0.8)); drop.position.copy(p); list.push({ mesh: drop, at: i * 0.015, grow: 0.05, life: 0.1, axis: [0, 1, 0], fade: 0.8 }); }
+    popUps(list, t);
+  }
+}
 // --- zone: a volume that stays where you put it and works on whatever is inside.
 function castZone(key, m, c) {
   const d = c.dir.clone().normalize(), t = c.t;
@@ -2787,6 +2875,7 @@ function castZone(key, m, c) {
   const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), energyMat(key, { scale: [2.5, 2.5, 2.5], flow: [0.3, 0.5, 0.2], cut: 0.12 }));
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 6, 60), glowMat(ELEMENTS[key].color.clone(), 0.6));
   ball.position.copy(centre); rim.position.copy(centre);
+  play(SFX.zone);
   const until = t + m.seconds, last = new Map(), epoch = shapeEpoch;
   addEffect([ball, rim], (n) => {
     if (epoch !== shapeEpoch) return false;
@@ -2973,7 +3062,7 @@ function cast(key, gesture, c) {
     c.wet = true;
   }
   if (c.power > 1) m = empowered(key, m, c.power);
-  if (c.quiet) { tone(500, 300, 0.08, 0.06, 'triangle'); KIND[m.kind](key, m, c); return; }
+  if (c.quiet) { const f = FAMILIAR_NOTE[key] || 500; tone(f, f * 0.6, 0.1, 0.07, key === 'terra' || key === 'gravis' ? 'sine' : 'triangle'); KIND[m.kind](key, m, c); return; }
   lastCast = key;
   moveSound(key, gesture, m.form);
   hudNote = (c.wet ? 'full ' : c.power > 1 ? 'twin ' : '') + (m.form ? m.form + ' ' : '') + m.name.toLowerCase();
@@ -3782,7 +3871,7 @@ function summonBlade(st, t) {
   g.renderOrder = 16; scene.add(g);
   b = { st, g, until: t + 10, born: t, tip: new THREE.Vector3(), prev: new THREE.Vector3(), struck: new Map(), first: true };
   blades.push(b);
-  play(SFX.lumen.lift); hudNote = 'blade of light'; lastCast = 'lumen';
+  play(SFX.blade); hudNote = 'blade of light'; lastCast = 'lumen';
   return b;
 }
 const _bd = new THREE.Vector3();
@@ -3975,6 +4064,7 @@ stream.sheet.material.side = THREE.DoubleSide;
 // The bone glaive on the end of Morph's tendril.
 stream.blade = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.34, 4).rotateX(Math.PI / 2).scale(0.35, 1, 1), new THREE.MeshBasicMaterial({ color: 0xf0dccf }));
 stream.blade.visible = false; scene.add(stream.blade);
+stream.beads = [0, 1, 2, 3, 4, 5, 6].map(() => { const bd = new THREE.Mesh(new THREE.OctahedronGeometry(0.024), new THREE.MeshBasicMaterial({ color: 0xf0dccf })); bd.visible = false; scene.add(bd); return bd; });
 stream.key = 'aqua';
 for (const m of [stream.mesh, stream.sheet]) { m.visible = false; m.frustumCulled = false; m.renderOrder = 15; scene.add(m); }
 // What drives the stream this frame: { root, dir, vel, eye, grip, squeeze, end }. Hands fill it in; so does the preview.
@@ -4003,7 +4093,7 @@ function endStream(t, ctl) {
   if (!stream.on) return;
   if (stream.latch && ctl) flingLatched(ctl);
   stream.on = false; stream.latch = null; stream.twoHand = false; stream.owner = stream.endOwner = null;
-  stream.mesh.visible = stream.sheet.visible = stream.blade.visible = false;
+  stream.mesh.visible = stream.sheet.visible = stream.blade.visible = false; stream.beads.forEach(bd => { bd.visible = false; });
   if (stream.key === 'aqua') water.pos.copy(stream.nodes[0].p);
 }
 const latchPos = () => stream.latch.e ? stream.latch.e.group.position : stream.latch.o.pos;
@@ -4070,6 +4160,7 @@ function updateStream(t, dt) {
     _sd.subVectors(nodes[i].p, nodes[i - 1].p);
     if (_sd.length() > seg * 1.4) nodes[i].p.copy(nodes[i - 1].p).addScaledVector(_sd.setLength(seg * 1.4), 1);
   }
+  if (flesh && !tipTarget) for (let i = 1; i < N; i++) nodes[i].p.lerp(_sa2.copy(root).addScaledVector(ctl.dir, seg * i).setY(root.y + ctl.dir.y * seg * i + Math.sin(t * 5 + i * 0.6) * 0.03 * i / N), 0.1);   // muscle: it reaches where you reach, and it never hangs still
   if (form === 'ice' && !tipTarget) for (let i = 1; i < N; i++) nodes[i].p.lerp(_sa2.copy(root).addScaledVector(ctl.dir, seg * i), 0.6);   // frozen: a blade
   for (let i = 1; i < N; i++) if (nodes[i].p.y < 0.03) nodes[i].p.y = 0.03;
 
@@ -4174,6 +4265,7 @@ function updateStream(t, dt) {
   mesh.visible = true;
   mesh.material = streamMats[form];
   stream.blade.visible = flesh;
+  stream.beads.forEach((bd, i) => { bd.visible = flesh; if (flesh) bd.position.copy(nodes[1 + i * 2].p); });
   if (flesh) { stream.blade.position.copy(nodes[N - 1].p); stream.blade.lookAt(_sa2.copy(nodes[N - 1].p).multiplyScalar(2).sub(nodes[N - 3].p)); }
   mesh.geometry.dispose();
   const radius = form === 'ice' ? 0.02 : flesh ? 0.016 : 0.012 + 0.006 * Math.min(water.amount, 4);
@@ -4604,14 +4696,14 @@ function plantTurret(point, normal, t) {
       head.lookAt(look.copy(prey.group.position));
       reveal(prey, n, 1.5, ELEMENTS.flora.color);
       look.copy(prey.group.position).sub(self.pos).normalize();
-      if (near < 1.1 && n > self.biteAt) { self.biteAt = n + 1.2; self.snap = n; play(SFX.morph.lift); hit(prey, 'flora', n, look, { damage: 1 }); }
+      if (near < 1.1 && n > self.biteAt) { self.biteAt = n + 1.2; self.snap = n; play(SFX.snap); hit(prey, 'flora', n, look, { damage: 1 }); }
       else if (near >= 1.1 && n > self.spitAt) {
         self.spitAt = n + 1.6; self.snap = n;
-        tone(700, 300, 0.08, 0.1, 'triangle');
+        play(SFX.spit);
         castBolt('flora', { name: 'Thorn', kind: 'bolt', speed: 12, radius: 0.2, shape: 'orb', size: 0.02, bleed: forms.flora === 'thorn', spore: forms.flora === 'spore', life: 1 }, { hand: self.pos.clone().addScaledVector(look, 0.15), dir: look.clone(), eye: viewerPos.clone(), fwd: look.clone(), t: n, scale: 1 });
       }
     }
-    for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.7) { o.dead = true; self.snap = n; play(SFX.morph.lift); puff('flora', o.pos, 12, 1.6, {}); }   // it eats what flies past
+    for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.7) { o.dead = true; self.snap = n; play(SFX.snap); puff('flora', o.pos, 12, 1.6, {}); }   // it eats what flies past
     return true;
   });
   return self;
@@ -5235,7 +5327,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 12. open palm toward you: pick'; drawHud(); }
+  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 13. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;
@@ -5816,7 +5908,7 @@ window.__tremor = {
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < draftUntil; },
-  mirrorLine, rift, implode, ELEMENT_ORDER, SEALS, resonate, dressEcho, set sealAt(v) { sealAt = v; }, thralls, raiseThrall, familiars, summonFamiliar, get prevSelected() { return prevSelected; }, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
+  mirrorLine, rift, implode, ELEMENT_ORDER, ringFlourish, coneFlourish, SEALS, resonate, dressEcho, set sealAt(v) { sealAt = v; }, thralls, raiseThrall, familiars, summonFamiliar, get prevSelected() { return prevSelected; }, turrets, plantTurret, blades, summonBlade, voids, shoveBarrier, previewHand, guard, snare, constellation, quench, fireLines, KINDS, get armourUntil() { return armourUntil; }, get playerHP() { return playerHP; }, set playerHP(v) { playerHP = v; }, get occlusion() { return occlusion; }, SFX, FORM_SFX, play, ensureAudio, get audio() { return audio; },
   stream, startStream, endStream, plantWall, currents, makeCurrent, bendCurrents, fireLine, raiseRidge, drawBegin, drawAdd, drawEnd,
   get streamCtl() { return streamCtl; }, set streamCtl(v) { streamCtl = v; if (!v) stream.seenT = -9; },
   objects, spawnObject, scatterObjects, findGrabTarget, beginHold, updateHold, endHold, explode, throwFireball, throwCharged, kick,

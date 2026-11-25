@@ -4659,7 +4659,7 @@ function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'open palm toward you: pick'; drawHud(); }
+  if (!sawHands && (L.valid || R.valid)) { sawHands = true; hudNote = 'build 9. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { PULSE_SPEED, PULSE_LIFE, KINDS, REVEAL_TIME, ACID, ELEMENTS } from './data.js?v=16';
-import { play, SFX, tone, thump } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { scene, UP, ZERO } from './renderer.js?v=16';
-import { pulseUniforms } from './pulse.js?v=16';
-import { collide, lineOfSight } from './collision.js?v=16';
-import { echoes, ICE, STEEL_TINT, roomBounds, isOpen, scatterEchoes, isLive, reveal, hit } from './echoes.js?v=16';
+import { PULSE_SPEED, PULSE_LIFE, KINDS, REVEAL_TIME, ACID, ELEMENTS } from './data.js?v=17';
+import { play, SFX, tone, thump } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { scene, UP, ZERO } from './renderer.js?v=17';
+import { pulseUniforms } from './pulse.js?v=17';
+import { collide, lineOfSight } from './collision.js?v=17';
+import { echoes, ICE, STEEL_TINT, roomBounds, isOpen, scatterEchoes, isLive, reveal, hit } from './echoes.js?v=17';
 
 // ---------- creature behaviour ----------
 // They drift around the room out of sight, and every few seconds one of them stops, swells, and spits a shard at you.
@@ -52,6 +52,7 @@ function creatureAI(e, t, dt, eye) {
   e.restY = e.home.y;
 }
 export function spit(e, eye, t) {
+  if (LATE.decoy && LATE.decoy.until > t) eye = LATE.decoy.pos;      // it thinks the shadow is you
   const dir = eye.clone().sub(e.home).normalize();
   const o = LATE.spawnObject('shard', e.home.clone().addScaledVector(dir, 0.3));
   o.hostile = true; o.owner = e; o.born = t;

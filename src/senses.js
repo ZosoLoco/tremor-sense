@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { KINDS, HOLD_REVEAL, TIDE_SENSE, DRAFT_SENSE, ELEMENTS, FIST_SENSE } from './data.js?v=16';
-import { play, SFX, castSound } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { scene } from './renderer.js?v=16';
-import { pulseUniforms } from './pulse.js?v=16';
-import { collide, nearestRoomSurface, lineOfSight } from './collision.js?v=16';
-import { echoes, glowMat, roomBounds, reveal } from './echoes.js?v=16';
-import { AI, HOSTILE } from './creatures.js?v=16';
-import { particles, PCOL } from './visuals.js?v=16';
-import { addEffect } from './effects.js?v=16';
-import { MAX_OBJECTS, objects } from './objects.js?v=16';
-import { _cp } from './shaping.js?v=16';
+import { KINDS, HOLD_REVEAL, TIDE_SENSE, DRAFT_SENSE, ELEMENTS, FIST_SENSE } from './data.js?v=17';
+import { play, SFX, castSound } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { scene } from './renderer.js?v=17';
+import { pulseUniforms } from './pulse.js?v=17';
+import { collide, nearestRoomSurface, lineOfSight } from './collision.js?v=17';
+import { echoes, glowMat, roomBounds, reveal } from './echoes.js?v=17';
+import { AI, HOSTILE } from './creatures.js?v=17';
+import { particles, PCOL } from './visuals.js?v=17';
+import { addEffect } from './effects.js?v=17';
+import { MAX_OBJECTS, objects } from './objects.js?v=17';
+import { _cp } from './shaping.js?v=17';
 
 // ---------- senses ----------
 // Each one fills the whole room and tells you something different.

@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms } from './data.js?v=16';
-import { tone, thump, tick, thud } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { scene, UP, ZERO, now } from './renderer.js?v=16';
-import { FIRE_LIGHT, LAVA_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=16';
-import { collide, nearestRoomSurface } from './collision.js?v=16';
-import { echoes, glowMat, roomBounds, spawnEye, isOpen, isLive, reveal, hit } from './echoes.js?v=16';
-import { HOSTILE, playerHurt, segmentDistance } from './creatures.js?v=16';
-import { waterMat, energyMat, stoneMat, craggy, particles, SMOKE, STEAM, DUST, SAND, thinned, fume, PCOL, puff } from './visuals.js?v=16';
-import { addEffect } from './effects.js?v=16';
+import { ELEMENTS, forms } from './data.js?v=17';
+import { tone, thump, tick, thud } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { scene, UP, ZERO, now } from './renderer.js?v=17';
+import { FIRE_LIGHT, LAVA_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=17';
+import { collide, nearestRoomSurface } from './collision.js?v=17';
+import { echoes, glowMat, roomBounds, spawnEye, isOpen, isLive, reveal, hit } from './echoes.js?v=17';
+import { HOSTILE, playerHurt, segmentDistance } from './creatures.js?v=17';
+import { waterMat, energyMat, stoneMat, craggy, particles, SMOKE, STEAM, DUST, SAND, thinned, fume, PCOL, puff } from './visuals.js?v=17';
+import { addEffect } from './effects.js?v=17';
 
 // ---------- objects: loose things in the room ----------
 // Simple bodies: a sphere each for collision, gravity, bounce off the real room.

@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { ACID, ELEMENTS } from './data.js?v=16';
-import { moveSound } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { scene, UP, ZERO, now } from './renderer.js?v=16';
-import { FIRE_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=16';
-import { collide, lineOfSight } from './collision.js?v=16';
-import { echoes, glowMat, isLive, hit } from './echoes.js?v=16';
-import { ENERGY, energyMat, stoneMat, craggy, puff } from './visuals.js?v=16';
-import { impact } from './effects.js?v=16';
-import { cast } from './flourish.js?v=16';
-import { HEAT_TIME, GRIP, objects, spawnObject, spawnCloud, turn, crushObject } from './objects.js?v=16';
-import { makeWrap, updateWrap, dropHold } from './water.js?v=16';
+import { ACID, ELEMENTS } from './data.js?v=17';
+import { moveSound } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { scene, UP, ZERO, now } from './renderer.js?v=17';
+import { FIRE_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=17';
+import { collide, lineOfSight } from './collision.js?v=17';
+import { echoes, glowMat, isLive, hit } from './echoes.js?v=17';
+import { ENERGY, energyMat, stoneMat, craggy, puff } from './visuals.js?v=17';
+import { impact } from './effects.js?v=17';
+import { cast } from './flourish.js?v=17';
+import { HEAT_TIME, GRIP, objects, spawnObject, spawnCloud, turn, crushObject } from './objects.js?v=17';
+import { makeWrap, updateWrap, dropHold } from './water.js?v=17';
 
 // ---------- grip: holding on to something ----------
 // Aero holds objects (and can crush them with the other fist). Aqua holds echoes, the water in them.

@@ -1,29 +1,29 @@
 import * as THREE from 'three';
-import { KINDS, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, forms, MOVES } from './data.js?v=16';
-import { ensureAudio, play, SFX, FORM_SFX, getAudio } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { formOf } from './core.js?v=16';
-import { renderer, scene, camera, now } from './renderer.js?v=16';
-import { pulseUniforms, lights, updateLights, firePulse } from './pulse.js?v=16';
-import { planes, meshes, dressRoom, syncRoom } from './room.js?v=16';
-import { barriers, clearBarriers, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=16';
-import { echoes, roomBounds, isOpen, scatterEchoes, reveal, hit } from './echoes.js?v=16';
-import { CREATURE, AI, spit, playerHurt, updateEchoes } from './creatures.js?v=16';
-import { particles, smoke, tuneDetail } from './visuals.js?v=16';
-import { effects, updateEffects, thralls, raiseThrall } from './effects.js?v=16';
-import { ringFlourish, coneFlourish, dressEcho, shoveBarrier, cast } from './flourish.js?v=16';
-import { objects, spawnObject, scatterObjects, spawnCloud, ignite, kick, implode, explode, updateObjects } from './objects.js?v=16';
-import { sources, addSource, water, updateWater } from './water.js?v=16';
-import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, showCharge, throwCharged, throwFireball } from './grip.js?v=16';
-import { blades, summonBlade, updateBlades, voids, updateVoids, rain, updateClaws, updateThreats } from './constructs.js?v=16';
-import { SEALS, resonate, updateStorm } from './seal.js?v=16';
-import { guard, updateGuard } from './guard.js?v=16';
-import { stream, startStream, endStream, updateStream, plantWall, drawBegin, drawAdd, drawEnd, familiars, summonFamiliar, currents, makeCurrent, _cp, updateCurrents, bendCurrents, fireLines, quench, fireLine, mirrorLine, rift, turrets, plantTurret, snare, constellation, raiseRidge } from './shaping.js?v=16';
-import { senseAero, tideUniforms, chiGhosts, held, updateHeldSenses } from './senses.js?v=16';
-import { setForm, cycleForm, selectElement, options, flipSwitch } from './selection.js?v=16';
-import { drawHud } from './hud.js?v=16';
-import { waterAnchor, _off, classifyGesture, isTwin, updateHands } from './hands.js?v=16';
-import { selectGesture, previewGrip, previewAim, previewDraw, previewHand, previewPinch } from './preview.js?v=16';
+import { KINDS, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, forms, MOVES } from './data.js?v=17';
+import { ensureAudio, play, SFX, FORM_SFX, getAudio } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { formOf } from './core.js?v=17';
+import { renderer, scene, camera, now } from './renderer.js?v=17';
+import { pulseUniforms, lights, updateLights, firePulse } from './pulse.js?v=17';
+import { planes, meshes, dressRoom, syncRoom } from './room.js?v=17';
+import { barriers, clearBarriers, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=17';
+import { echoes, roomBounds, isOpen, scatterEchoes, reveal, hit } from './echoes.js?v=17';
+import { CREATURE, AI, spit, playerHurt, updateEchoes } from './creatures.js?v=17';
+import { particles, smoke, tuneDetail } from './visuals.js?v=17';
+import { effects, updateEffects, thralls, raiseThrall } from './effects.js?v=17';
+import { ringFlourish, coneFlourish, dressEcho, shoveBarrier, cast } from './flourish.js?v=17';
+import { objects, spawnObject, scatterObjects, spawnCloud, ignite, kick, implode, explode, updateObjects } from './objects.js?v=17';
+import { sources, addSource, water, updateWater } from './water.js?v=17';
+import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, showCharge, throwCharged, throwFireball } from './grip.js?v=17';
+import { blades, summonBlade, updateBlades, voids, updateVoids, rain, updateClaws, updateThreats } from './constructs.js?v=17';
+import { SEALS, resonate, updateStorm } from './seal.js?v=17';
+import { guard, updateGuard } from './guard.js?v=17';
+import { stream, startStream, endStream, updateStream, plantWall, drawBegin, drawAdd, drawEnd, familiars, summonFamiliar, currents, makeCurrent, _cp, updateCurrents, bendCurrents, fireLines, quench, fireLine, mirrorLine, rift, turrets, plantTurret, snare, constellation, raiseRidge } from './shaping.js?v=17';
+import { senseAero, tideUniforms, chiGhosts, held, updateHeldSenses } from './senses.js?v=17';
+import { setForm, cycleForm, selectElement, options, flipSwitch } from './selection.js?v=17';
+import { drawHud } from './hud.js?v=17';
+import { waterAnchor, _off, classifyGesture, isTwin, updateHands } from './hands.js?v=17';
+import { selectGesture, previewGrip, previewAim, previewDraw, previewHand, previewPinch } from './preview.js?v=17';
 
 // ---------- loop ----------
 const viewerPos = new THREE.Vector3();
@@ -140,7 +140,7 @@ renderer.setAnimationLoop((ms, frame) => {
 
 // Small hook for automated checks.
 window.__tremor = {
-  updateHands, get handState() { return LATE.handState; },
+  updateHands, get handState() { return LATE.handState; }, get viewerPos() { return viewerPos; }, get decoy() { return LATE.decoy; },
   THREE, firePulse, echoes, pulseUniforms, MOVES, ELEMENTS, cast, classifyGesture, scatterEchoes, effects,
   collide, lineOfSight, senseAero, selectElement, held, reveal, particles, hit, isTwin, tideUniforms, chiGhosts,
   get draftOn() { return now() < ST.draftUntil; },

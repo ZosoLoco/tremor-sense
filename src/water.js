@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { castSound } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { scene, UP } from './renderer.js?v=16';
-import { lineOfSight } from './collision.js?v=16';
-import { echoes, isLive, hit } from './echoes.js?v=16';
-import { _to, segmentDistance, flat } from './creatures.js?v=16';
-import { waterMat, energyMat, particles, PCOL, puff } from './visuals.js?v=16';
-import { addEffect } from './effects.js?v=16';
-import { objects, kick } from './objects.js?v=16';
+import { castSound } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { scene, UP } from './renderer.js?v=17';
+import { lineOfSight } from './collision.js?v=17';
+import { echoes, isLive, hit } from './echoes.js?v=17';
+import { _to, segmentDistance, flat } from './creatures.js?v=17';
+import { waterMat, energyMat, particles, PCOL, puff } from './visuals.js?v=17';
+import { addEffect } from './effects.js?v=17';
+import { objects, kick } from './objects.js?v=17';
 
 // ---------- water: sources, and the water you carry ----------
 // Aqua works best with water to hand. Put an open palm on any surface and water wells up there for a while.

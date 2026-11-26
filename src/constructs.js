@@ -1,18 +1,18 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms, CURL_OPEN } from './data.js?v=16';
-import { play, SFX, tone, castSound, thump } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { formOf } from './core.js?v=16';
-import { scene, UP, camera, renderer } from './renderer.js?v=16';
-import { VOLT_LIGHT, lightNow, FIRE_LIGHT } from './pulse.js?v=16';
-import { echoes, glowMat, isLive, reveal, hit } from './echoes.js?v=16';
-import { segmentDistance } from './creatures.js?v=16';
-import { energyMat, particles, PCOL, puff, earthMat } from './visuals.js?v=16';
-import { addEffect, castBolt, zap } from './effects.js?v=16';
-import { cast } from './flourish.js?v=16';
-import { nearestRoomSurface, lineOfSight } from './collision.js?v=16';
-import { objects, sendBack, turn } from './objects.js?v=16';
-import { sources } from './water.js?v=16';
+import { ELEMENTS, forms, CURL_OPEN } from './data.js?v=17';
+import { play, SFX, tone, castSound, thump } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { formOf } from './core.js?v=17';
+import { scene, UP, camera, renderer } from './renderer.js?v=17';
+import { VOLT_LIGHT, lightNow, FIRE_LIGHT } from './pulse.js?v=17';
+import { echoes, glowMat, isLive, reveal, hit } from './echoes.js?v=17';
+import { segmentDistance } from './creatures.js?v=17';
+import { energyMat, particles, PCOL, puff, earthMat } from './visuals.js?v=17';
+import { addEffect, castBolt, zap } from './effects.js?v=17';
+import { cast } from './flourish.js?v=17';
+import { nearestRoomSurface, lineOfSight } from './collision.js?v=17';
+import { objects, sendBack, turn } from './objects.js?v=17';
+import { sources } from './water.js?v=17';
 
 // ---------- hand constructs ----------
 // Lumen's sweep leaves a blade of light in the hand that made it, for ten seconds. Swing it and it cuts; swing it fast

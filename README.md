@@ -283,3 +283,18 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
   creature and it calls stars down, never touches), umbra scythe (one stroke hits everything round you), necro spear
   (only a forward thrust counts; runs through a line twice its length).
 - Tests: `hands.py` drives the hand loop with made-up hands; `checkimports.py` checks every import resolves.
+
+## Build 17: moves that are different kinds of thing
+
+Eight moves that were another discipline's column, wall or ring in a new colour are now their own kind:
+
+| Discipline | Gesture | Was | Now |
+|---|---|---|---|
+| Lumen | lift | Pillar (column) | **Motes**: three lights circle you for 10 s and strike whatever comes within reach |
+| Lumen | slam | Nova (ring) | **Sanctuary**: a dome where you strike, 5 s; shards cannot enter, creatures inside are blinded and exposed |
+| Gravis | sweep | Tilt (wall) | **Sling**: the creature you are looking at is thrown into the nearest other creature, or the wall |
+| Flora | lift | Sprout (column) | **Flytrap**: jaws laid open on the surface you aim at; they close on the first creature to cross them |
+| Astra | lift | Moonrise (column) | **Satellites**: two moons circle you for 12 s, take shards out of the air and ram what gets close |
+| Astra | sweep | Aurora (wall) | **Constellate**: marks up to four creatures in view; a moment later a star falls on each |
+| Morph | lift | Spine (column) | **Harpoon**: the arm goes out, hooks the first thing it meets and drags it to you |
+| Umbra | lift | Pit (void) | **Doppel**: your shadow stays where you stood for 6 s; creatures shoot at it, and it bursts |

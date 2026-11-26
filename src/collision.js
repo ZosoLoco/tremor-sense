@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { ST, LATE } from './state.js?v=16';
-import { renderer, now } from './renderer.js?v=16';
-import { previewGroup, fallbackFloor, planes, meshes } from './room.js?v=16';
+import { ST, LATE } from './state.js?v=17';
+import { renderer, now } from './renderer.js?v=17';
+import { previewGroup, fallbackFloor, planes, meshes } from './room.js?v=17';
 
 // ---------- collision with the room ----------
 // Planes are cheap to test, so they are the colliders whenever the headset provides them.

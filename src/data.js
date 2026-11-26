@@ -159,9 +159,9 @@ export const MOVES = {
   lumen: {
     punch: { name: 'Lance',       kind: 'beam',   range: 14, straight: true },
     shove: { name: 'Flare',       kind: 'cone',   range: 5, angle: 0.8 },
-    lift:  { name: 'Pillar',      kind: 'column', radius: 0.32, top: 0.12, bottom: 0.14, sides: 16 },
+    lift:  { name: 'Motes',       kind: 'orbit',  count: 3, seconds: 10, mode: 'zap', range: 2.8 },      // three lights circle you and strike whatever comes close
     sweep: { name: 'Halo',        kind: 'bolt',   speed: 14, radius: 0.45, shape: 'crescent', size: 0.45, pierce: true, life: 1 },
-    slam:  { name: 'Nova',        kind: 'ring',   maxR: 4, height: 1.2 },
+    slam:  { name: 'Sanctuary',   kind: 'dome',   radius: 1.5, seconds: 5 },                             // a dome of light where you strike: nothing thrown gets in, and what walks in is blinded
     point: { name: 'Prism',       kind: 'bolt',   speed: 18, radius: 0.2, shape: 'orb', size: 0.03, bounces: 4, pierce: true, life: 2.5 },
     grip:  { name: 'Sunburst (hold)', kind: 'bolt', speed: 10, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.4, damage: 2, life: 2.2 },
     charge: { name: 'Sunburst',   kind: 'bolt',   speed: 10, radius: 0.3, shape: 'orb', size: 0.07, blast: 1.4, damage: 2, life: 2.2 },
@@ -170,7 +170,7 @@ export const MOVES = {
     punch: { name: 'Graviton',    kind: 'bolt',   speed: 4.5, radius: 0.3, shape: 'orb', size: 0.06, implode: 1.4, homing: 7, life: 4 },   // slow, and it will not miss: it falls toward what you threw it at
     shove: { name: 'Repulse',     kind: 'cone',   range: 5, angle: 0.6, push: 5 },
     lift:  { name: 'Levitate',    kind: 'column', launch: true, drop: 1.3, radius: 0.45, top: 0.28, bottom: 0.28, sides: 18 },   // up, a held breath, then let go
-    sweep: { name: 'Tilt',        kind: 'wall',   ram: 6, width: 2.2, height: 1.3, passThrough: true },
+    sweep: { name: 'Sling',       kind: 'fling' },                                                       // no projectile: the creature you are looking at is the projectile
     slam:  { name: 'Crush',       kind: 'ring',   maxR: 3.6, height: 1.6 },
     point: { name: 'Singularity', kind: 'void',   radius: 2, range: 10 },
     grip:  { name: 'Gravity Grip', kind: 'grip' },
@@ -179,7 +179,7 @@ export const MOVES = {
   flora: {
     punch: { name: 'Thorn',       kind: 'bolt',   speed: 13, radius: 0.22, shape: 'orb', size: 0.03, pierce: true },
     shove: { name: 'Bramble',     kind: 'wall',   ram: 4, width: 2, height: 1.4, stand: 25 },
-    lift:  { name: 'Sprout',      kind: 'column', launch: true, radius: 0.35, top: 0.1, bottom: 0.2, sides: 8 },
+    lift:  { name: 'Flytrap',     kind: 'trap' },                                                        // jaws laid open on the surface you aim at; they close on the first thing to cross them
     sweep: { name: 'Vine Lash',   kind: 'whip',   range: 3.8, arc: 1.1 },
     slam:  { name: 'Overgrowth',  kind: 'ring',   maxR: 4, height: 1.2 },
     point: { name: 'Snapper Seed', kind: 'bolt',  speed: 9, radius: 0.25, shape: 'orb', size: 0.045, seed: true, turret: true },   // in a creature it sprouts; on any surface it grows a snapper
@@ -189,8 +189,8 @@ export const MOVES = {
   astra: {
     punch: { name: 'Comet',       kind: 'bolt',   speed: 11, radius: 0.3, shape: 'orb', size: 0.06, blast: 0.7, sky: true, life: 2 },
     shove: { name: 'Downburst',   kind: 'cone',   range: 4.5, angle: 0.8, sky: true, push: 3 },
-    lift:  { name: 'Moonrise',    kind: 'column', launch: true, radius: 0.4, top: 0.25, bottom: 0.25, sides: 18 },
-    sweep: { name: 'Aurora',      kind: 'wall',   ram: 6, width: 2.4, height: 1.5, passThrough: true },
+    lift:  { name: 'Satellites',  kind: 'orbit',  count: 2, seconds: 12, mode: 'ward' },                 // two moons circle you: they take shards out of the air and ram what gets close
+    sweep: { name: 'Constellate', kind: 'mark',   delay: 1.1, max: 4 },                                  // a sweep of the hand marks everything in view; a moment later a star falls on each mark
     slam:  { name: 'Starfall',    kind: 'ring',   maxR: 4.2, height: 1.6 },
     point: { name: 'Sunbeam',     kind: 'beam',   range: 6, straight: true, sky: true, damage: 2 },
     grip:  { name: 'Meteor Shower (hold)', kind: 'bolt', speed: 11, radius: 0.3, shape: 'orb', size: 0.06, blast: 0.8, sky: true, shower: 5, life: 2 },
@@ -199,7 +199,7 @@ export const MOVES = {
   morph: {
     punch: { name: 'Spear Hand',  kind: 'lance',  range: 2.8, damage: 2 },      // the arm itself goes out, through everything in line, and comes back
     shove: { name: 'Carapace',    kind: 'cone',   range: 1.4, angle: 1.2, damage: 1, push: 4, armour: 4 },
-    lift:  { name: 'Spine',       kind: 'column', launch: true, radius: 0.3, top: 0.03, bottom: 0.16, sides: 5 },
+    lift:  { name: 'Harpoon',     kind: 'lance',  range: 4.5, damage: 1, yank: true },                   // the arm goes out, hooks the first thing it meets, and drags it to you
     sweep: { name: 'Tail Whip',   kind: 'whip',   range: 2.6, arc: 1.4, damage: 2 },
     slam:  { name: 'Stomp',       kind: 'ring',   maxR: 3, height: 1.4, launch: true },
     point: { name: 'Blood Needle', kind: 'bolt',  speed: 22, radius: 0.18, shape: 'needle', venom: true, blood: true },   // costs nothing; what it kills gives blood back
@@ -209,7 +209,7 @@ export const MOVES = {
   umbra: {
     punch: { name: 'Shade Spike', kind: 'column', radius: 0.3, top: 0.01, bottom: 0.13, sides: 4 },       // nothing leaves your hand: it comes out of the surface nearest the target
     shove: { name: 'Eclipse',     kind: 'zone',   radius: 1.3, seconds: 5 },                              // a ball of dark that stays: what is inside is blind and bleeding
-    lift:  { name: 'Pit',         kind: 'void',   radius: 1.4, range: 8 },
+    lift:  { name: 'Doppel',      kind: 'decoy',  seconds: 6 },                                          // your shadow stays where you stood: they shoot at it, and it bursts
     sweep: { name: 'Scythe',      kind: 'bolt',   speed: 12, radius: 0.45, shape: 'crescent', size: 0.45, pierce: true, life: 1 },
     slam:  { name: 'Nightfall',   kind: 'ring',   maxR: 4.5, height: 1.6 },
     point: { name: 'Hex',         kind: 'beam',   range: 12, straight: true, chain: 1 },

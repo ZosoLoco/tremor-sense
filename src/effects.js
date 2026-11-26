@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms, lookOf } from './data.js?v=16';
-import { play, SFX, tone, thump, thud } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { scene, UP } from './renderer.js?v=16';
-import { pulseUniforms, FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=16';
-import { barriers, addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=16';
-import { echoes, glowMat, ICE, isLive, reveal, hit } from './echoes.js?v=16';
-import { _to, aimAssist, segmentDistance, flat } from './creatures.js?v=16';
-import { ENERGY, waterMat, energyMat, stoneMat, iceMat, earthMat, craggy, particles, smoke, SMOKE, STEAM, DUST, SAND, _fv, fume, PCOL, puff } from './visuals.js?v=16';
+import { ELEMENTS, forms, lookOf } from './data.js?v=17';
+import { play, SFX, tone, thump, thud } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { scene, UP } from './renderer.js?v=17';
+import { pulseUniforms, FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=17';
+import { barriers, addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=17';
+import { echoes, glowMat, ICE, isLive, reveal, hit } from './echoes.js?v=17';
+import { _to, aimAssist, segmentDistance, flat } from './creatures.js?v=17';
+import { ENERGY, waterMat, energyMat, stoneMat, iceMat, earthMat, craggy, particles, smoke, SMOKE, STEAM, DUST, SAND, _fv, fume, PCOL, puff } from './visuals.js?v=17';
 
 // ---------- effects ----------
 const fxGroup = new THREE.Group();
@@ -937,7 +937,18 @@ export function castLance(key, m, c) {
   sinew.scale.set(1, 1, 0.55);
   spear.add(bone, sinew);
   spear.position.copy(c.hand); spear.lookAt(tip);
-  for (const e of echoes) if (isLive(e, t) && segmentDistance(e.group.position, c.hand, tip) < 0.32) hit(e, key, t, d, m);
+  let hooked = false;
+  for (const e of echoes) {
+    if (!isLive(e, t) || segmentDistance(e.group.position, c.hand, tip) > 0.32) continue;
+    hit(e, key, t, d, m);
+    if (m.yank && !hooked && !e.down) {             // hooked: it comes to you
+      hooked = true;
+      const back = c.hand.clone().sub(e.group.position), dist = back.length();
+      back.setY(0).normalize();
+      e.vel.x += back.x * Math.min(dist * 3.2, 9); e.vel.z += back.z * Math.min(dist * 3.2, 9);
+      e.blindUntil = Math.max(e.blindUntil, t + 1.2);
+    }
+  }
   for (const o of LATE.objects) if (!o.dead && !o.held && !o.def.cloud && segmentDistance(o.pos, c.hand, tip) < o.def.r + 0.1) LATE.kick(o, d.x * 5, 1.5, d.z * 5);
   if (wall) impact(wall.point, wall.normal, key, t, 0.25);
   addEffect([spear], (n) => {

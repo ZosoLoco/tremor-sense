@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { KINDS, ELEMENTS, FORMS, forms, MOVES } from './data.js?v=16';
-import { play, SFX, FAMILIAR_NOTE, moveSound, tone, thump } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { UP, ZERO } from './renderer.js?v=16';
-import { collide, lineOfSight } from './collision.js?v=16';
-import { echoes, glowMat, hit } from './echoes.js?v=16';
-import { aimAssist, flat } from './creatures.js?v=16';
-import { energyMat, puff } from './visuals.js?v=16';
-import { addEffect, castBolt, castCone, castColumn, castRing, castWall, castFault, zap, castBeam, castVoid, castLance, raiseThrall, castLegion } from './effects.js?v=16';
+import { KINDS, ELEMENTS, FORMS, forms, MOVES } from './data.js?v=17';
+import { play, SFX, FAMILIAR_NOTE, moveSound, tone, thump } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { UP, ZERO } from './renderer.js?v=17';
+import { collide, lineOfSight } from './collision.js?v=17';
+import { echoes, glowMat, hit } from './echoes.js?v=17';
+import { aimAssist, flat } from './creatures.js?v=17';
+import { energyMat, puff } from './visuals.js?v=17';
+import { addEffect, castBolt, castCone, castColumn, castRing, castWall, castFault, zap, castBeam, castVoid, castLance, raiseThrall, castLegion } from './effects.js?v=17';
 
 // ---------- what each discipline's blast and shockwave are actually made of ----------
 // Things that come up, stand a moment and go: roots, claws, spikes, shafts of light.
@@ -124,7 +124,179 @@ function castZone(key, m, c) {
     return n < until;
   });
 }
-const KIND = { zone: castZone, legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: (...a) => LATE.castWhip(...a) };
+// ---------- kinds of move that are not a thing thrown, a blast or a wave ----------
+// orbit: lights or moons that circle you for a while and act on their own.
+function castOrbit(key, m, c) {
+  const t0 = c.t, epoch = ST.shapeEpoch;
+  const orbs = Array.from({ length: m.count }, (_, i) => {
+    const g = new THREE.Group();
+    if (m.mode === 'zap') { g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.035), new THREE.MeshBasicMaterial({ color: 0xffffff })), new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), energyMat(key, { scale: [14, 14, 14], cut: 0.3 }))); }
+    else { g.add(new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), new THREE.MeshBasicMaterial({ color: i ? 0xc9d6ff : 0xe8ecf8 })), new THREE.Mesh(new THREE.SphereGeometry(0.02, 6, 5).translate(0.03, 0.03, 0.06), new THREE.MeshBasicMaterial({ color: 0x8a94b8 })), new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.004, 4, 30), glowMat(ELEMENTS[key].color.clone(), 0.7))); }
+    g.userData.cool = t0 + 0.6 + i * 0.3;
+    return g;
+  });
+  play(SFX.orbit);
+  const eye = () => LATE.viewerPos;
+  addEffect(orbs, (n) => {
+    if (epoch !== ST.shapeEpoch) return false;
+    const fade = Math.min((n - t0) / 0.3, 1) * Math.min((t0 + m.seconds - n) / 0.5, 1);
+    orbs.forEach((g, i) => {
+      const ang = n * (m.mode === 'zap' ? 2.4 : 1.5) + (i / m.count) * Math.PI * 2, r = m.mode === 'zap' ? 0.7 : 0.95;
+      g.position.set(eye().x + Math.cos(ang) * r, eye().y - 0.25 + Math.sin(n * 1.7 + i * 2) * 0.12, eye().z + Math.sin(ang) * r);
+      g.scale.setScalar(Math.max(fade, 0.01)); g.rotation.y += 0.05;
+      if (n < g.userData.cool) return;
+      if (m.mode === 'zap') {                        // strikes the nearest thing it can see
+        let prey = null, near = m.range;
+        for (const e of echoes) { if (e.down) continue; const dd = e.group.position.distanceTo(g.position); if (dd < near && lineOfSight(g.position, e.group.position)) { near = dd; prey = e; } }
+        if (!prey) return;
+        g.userData.cool = n + 1.3;
+        zap(g.position.clone(), prey.group.position.clone(), n);
+        tone(2093, 1568, 0.08, 0.08, 'triangle');
+        hit(prey, key, n, prey.group.position.clone().sub(g.position).normalize(), { damage: 1, shadow: forms.lumen === 'shadow' });
+      } else {                                       // takes shards out of the air, rams what comes close
+        for (const o of LATE.objects) if (!o.dead && o.hostile && o.pos.distanceTo(g.position) < 0.7) { o.dead = true; puff(key, o.pos, 14, 2, {}); tone(600, 300, 0.1, 0.12, 'triangle'); g.userData.cool = n + 0.4; return; }
+        for (const e of echoes) if (!e.down && e.group.position.distanceTo(g.position) < 0.5) { g.userData.cool = n + 1.5; thump(); hit(e, key, n, e.group.position.clone().sub(eye()).normalize(), { damage: 1, push: 5 }); return; }
+      }
+    });
+    return n < t0 + m.seconds;
+  });
+}
+// dome: a shelter that stands where you struck.
+function castDome(key, m, c) {
+  const under = c.ground ? null : collide(c.hand, c.hand.clone().setY(c.hand.y - 2.6));
+  const centre = (c.ground || (under ? under.point : c.hand.clone().setY(0))).clone(), t0 = c.t, epoch = ST.shapeEpoch, R = m.radius * (c.power > 1 ? 1.3 : 1);
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), energyMat(key, { scale: [3, 3, 3], flow: [0, 0.3, 0], cut: 0.62 }));
+  const ribs = new THREE.Group();
+  for (let i = 0; i < 6; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(1, 0.008, 4, 40, Math.PI), glowMat(new THREE.Color(0xfff6d0), 0.8)); rib.rotation.y = (i / 6) * Math.PI; ribs.add(rib); }
+  const foot = new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 64).rotateX(-Math.PI / 2), glowMat(new THREE.Color(0xffffff), 0.9));
+  for (const o of [shell, ribs, foot]) o.position.copy(centre);
+  foot.position.y += 0.02;
+  play(SFX.dome);
+  const seen = new Set();
+  addEffect([shell, ribs, foot], (n) => {
+    if (epoch !== ST.shapeEpoch) return false;
+    const k = Math.min((n - t0) / 0.25, 1), out = Math.min((t0 + m.seconds - n) / 0.5, 1);
+    for (const o of [shell, ribs, foot]) o.scale.setScalar(Math.max(R * k, 0.01));
+    shell.material.opacity = out; ribs.children.forEach(r => { r.material.opacity = 0.8 * out; }); foot.material.opacity = 0.9 * out;
+    for (const o of LATE.objects) if (!o.dead && o.hostile && o.pos.distanceTo(centre) < R + 0.1) { o.dead = true; puff(key, o.pos, 16, 2, {}); tone(1568, 2093, 0.08, 0.1, 'triangle'); }
+    for (const e of echoes) {
+      if (e.down || e.group.position.distanceTo(centre) > R) continue;
+      e.blindUntil = Math.max(e.blindUntil, n + 0.6); e.exposedUntil = Math.max(e.exposedUntil, n + 6);
+      if (!seen.has(e)) { seen.add(e); hit(e, key, n, UP, { damage: 1 }); }
+    }
+    return n < t0 + m.seconds;
+  });
+}
+// fling: the target becomes the projectile. It goes into the nearest other creature if there is one, otherwise the wall.
+function castFling(key, m, c) {
+  const t0 = c.t, d = c.dir.clone().normalize();
+  let e = aimAssist(c.eye, d, 0.7, t0);
+  if (!e) { let best = 0.9; for (const o of echoes) { if (o.down || !(o.revealedUntil > t0)) continue; const a = o.group.position.clone().sub(c.eye).angleTo(c.fwd); if (a < best) { best = a; e = o; } } }
+  if (!e) { ST.hudNote = 'nothing to sling'; LATE.drawHud(); return; }
+  let into = null, near = 6;
+  for (const o of echoes) { if (o === e || o.down) continue; const dd = o.group.position.distanceTo(e.group.position); if (dd < near) { near = dd; into = o; } }
+  const dir = into ? into.group.position.clone().sub(e.group.position).setY(0).normalize() : new THREE.Vector3(c.fwd.z, 0, -c.fwd.x).multiplyScalar(e.group.position.clone().sub(c.eye).dot(new THREE.Vector3(c.fwd.z, 0, -c.fwd.x)) >= 0 ? 1 : -1);
+  play(SFX.sling);
+  e.vel.x = dir.x * 9; e.vel.z = dir.z * 9; e.blindUntil = Math.max(e.blindUntil, t0 + 1.5);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.012, 5, 40), glowMat(ELEMENTS[key].color.clone(), 0.9));
+  let peak = 0, done = false;
+  addEffect([ring], (n) => {
+    ring.position.copy(e.group.position); ring.lookAt(ring.position.clone().add(dir)); ring.material.opacity = 0.9 * Math.max(1 - (n - t0) / 1.4, 0);
+    if (done || e.down) return n - t0 < 0.3;
+    const sp = Math.hypot(e.vel.x, e.vel.z); peak = Math.max(peak, sp);
+    if (Math.random() < 0.6) puff(key, e.group.position, 1, 0.4, {});
+    for (const o of echoes) if (o !== e && !o.down && o.group.position.distanceTo(e.group.position) < 0.5) { done = true; play(SFX.crash); hit(o, key, n, dir, { damage: 2, push: 4 }); hit(e, key, n, dir, { damage: 2, kind: 'void' }); ST.hudNote = 'into each other'; LATE.drawHud(); return true; }
+    if (n - t0 > 0.15 && peak > 4 && sp < peak * 0.35) { done = true; play(SFX.crash); puff(key, e.group.position, 30, 3, {}); hit(e, key, n, dir, { damage: 2, kind: 'void' }); ST.hudNote = 'into the wall'; LATE.drawHud(); }
+    return n - t0 < 1.4;
+  });
+}
+// trap: jaws laid open on a surface. They close on the first creature to cross them.
+const traps = [];
+function castTrap(key, m, c) {
+  const t0 = c.t, d = c.dir.clone().normalize(), epoch = ST.shapeEpoch;
+  const mark = aimAssist(c.eye, d, 0.5, t0);
+  let s = collide(c.eye, c.eye.clone().addScaledVector(d, 7));
+  if (mark) { const under = collide(mark.group.position, mark.group.position.clone().setY(-0.3)); if (under) s = under; }
+  if (!s) { ST.hudNote = 'aim it at a surface'; LATE.drawHud(); return; }
+  if (traps.length >= 3) traps[0].until = 0;
+  const g = new THREE.Group();
+  g.position.copy(s.point).addScaledVector(s.normal, 0.02);
+  g.quaternion.setFromUnitVectors(UP, s.normal);
+  const leaf = new THREE.MeshBasicMaterial({ color: 0x3d8a22, side: THREE.DoubleSide }), mouth = new THREE.MeshBasicMaterial({ color: 0xc8204a, side: THREE.DoubleSide }), tooth = new THREE.MeshBasicMaterial({ color: 0xfff6d8 });
+  const jaws = [1, -1].map(side => {
+    const jaw = new THREE.Group();
+    jaw.add(new THREE.Mesh(new THREE.CircleGeometry(0.3, 16, 0, Math.PI).rotateX(-Math.PI / 2).translate(0, 0.005, 0), mouth), new THREE.Mesh(new THREE.CircleGeometry(0.32, 16, 0, Math.PI).rotateX(-Math.PI / 2), leaf));
+    for (let k = 0; k < 9; k++) { const a = (k + 0.5) / 9 * Math.PI; const th = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.09, 4), tooth); th.position.set(Math.cos(a) * 0.29, 0.045, -Math.sin(a) * 0.29); jaw.add(th); }
+    jaw.rotation.y = side > 0 ? 0 : Math.PI;
+    const hinge = new THREE.Group(); hinge.add(jaw); g.add(hinge);
+    return hinge;
+  });
+  g.scale.setScalar(0.01);
+  const self = { pos: g.position.clone(), until: t0 + 30, shut: -1 };
+  traps.push(self);
+  play(SFX.trapSet); puff(key, self.pos, 16, 1.4, { dir: s.normal, spread: 0.6 });
+  addEffect([g], (n) => {
+    if (epoch !== ST.shapeEpoch || n > self.until) { traps.splice(traps.indexOf(self), 1); return false; }
+    g.scale.setScalar(Math.min((n - t0) / 0.3, 1));
+    const closed = self.shut > 0 ? Math.min((n - self.shut) / 0.07, 1) : 0;
+    jaws[0].rotation.x = -closed * 1.45; jaws[1].rotation.x = closed * 1.45;
+    if (self.shut < 0 && n - t0 > 0.4) for (const e of echoes) {
+      if (e.down || e.group.position.distanceTo(self.pos) > 0.65) continue;
+      self.shut = n; self.until = n + 1.2;
+      play(SFX.trapSnap);
+      hit(e, key, n, UP, { damage: 2, bleed: forms.flora === 'thorn', spore: forms.flora === 'spore' });
+      if (!e.down) { e.rootedUntil = n + 5; e.vel.set(0, e.vel.y, 0); }
+      ST.hudNote = 'snap'; ST.lastCast = key; LATE.drawHud();
+      break;
+    }
+    return true;
+  });
+}
+// mark: everything you can see is marked; a moment later, each mark is answered.
+function castMark(key, m, c) {
+  const t0 = c.t, list = [];
+  for (const e of echoes) { if (e.down || !(e.revealedUntil > t0)) continue; if (e.group.position.clone().sub(c.eye).angleTo(c.fwd) < 1.0 && lineOfSight(c.eye, e.group.position)) list.push(e); }
+  list.sort((a, b) => a.group.position.distanceTo(c.eye) - b.group.position.distanceTo(c.eye)); list.length = Math.min(list.length, m.max);
+  if (!list.length) { ST.hudNote = 'nothing in view to mark'; LATE.drawHud(); return; }
+  play(SFX.mark);
+  const rings = list.map(() => new THREE.Mesh(new THREE.RingGeometry(0.2, 0.225, 5), glowMat(new THREE.Color(0xffffff), 0.9)));
+  let fired = false;
+  addEffect(rings, (n) => {
+    const k = (n - t0) / m.delay;
+    rings.forEach((r, i) => { const p = list[i].group.position; r.position.set(p.x, p.y + 0.45 + (1 - Math.min(k, 1)) * 0.5, p.z); r.rotation.x = -Math.PI / 2; r.rotation.z = n * 3; r.scale.setScalar(1.6 - Math.min(k, 1) * 0.6); r.visible = !list[i].down; });
+    if (k >= 1 && !fired) {
+      fired = true;
+      list.forEach((e, i) => { if (e.down) return; const at = e.group.position.clone(), top = at.clone().setY(at.y + 2.4);
+        let mv = { ...MOVES.astra.punch, sky: false }; if (forms.astra === 'night') mv.shadow = true; if (forms.astra === 'storm') { mv.volt = true; mv.rain = true; mv.form = 'storm'; }
+        castBolt(key, mv, { hand: top, dir: at.sub(top).normalize(), eye: c.eye.clone(), fwd: c.fwd.clone(), t: n + i * 0.001, scale: 1 }); });
+      play(SFX.astra.punch);
+    }
+    return k < 1.15;
+  });
+}
+// decoy: your shadow stays behind. They aim at it. When it is hit, or its time is up, it goes off.
+function castDecoy(key, m, c) {
+  const t0 = c.t, epoch = ST.shapeEpoch, pos = LATE.viewerPos.clone();
+  const g = new THREE.Group(), black = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10).translate(0, 0, 0), black), new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.5, 4, 10).translate(0, -0.55, 0), black));
+  g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.75, 4, 12).translate(0, -0.4, 0), energyMat('umbra', { scale: [5, 5, 5], flow: [0, 0.8, 0], cut: 0.3 })));
+  g.position.copy(pos);
+  LATE.decoy = { pos, until: t0 + m.seconds };
+  play(SFX.decoy);
+  ST.hudNote = 'your shadow stays'; LATE.drawHud();
+  let burst = false;
+  const go = (n) => { burst = true; LATE.decoy = null; play(SFX.umbra.slam); puff(key, pos, 60, 3, {});
+    for (const e of echoes) if (!e.down && e.group.position.distanceTo(pos) < 2.2) hit(e, key, n, e.group.position.clone().sub(pos).normalize(), { damage: 1, fear: forms.umbra === 'fear', hollow: forms.umbra === 'hollow' }); };
+  addEffect([g], (n) => {
+    if (epoch !== ST.shapeEpoch) { LATE.decoy = null; return false; }
+    if (burst) return false;
+    g.scale.setScalar(1 + 0.03 * Math.sin(n * 5));
+    for (const o of LATE.objects) if (!o.dead && o.hostile && o.pos.distanceTo(pos) < 0.5) { o.dead = true; go(n); return false; }
+    if (n > t0 + m.seconds) { go(n); return false; }
+    return true;
+  });
+}
+const KIND = { orbit: castOrbit, dome: castDome, fling: castFling, trap: castTrap, mark: castMark, decoy: castDecoy, zone: castZone, legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: (...a) => LATE.castWhip(...a) };
 
 // Both hands together: the same move, bigger and one point harder.
 function empowered(key, m, power) {

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { ELEMENTS, ELEMENT_ORDER, FORMS, forms, MOVES, SENSE_HOW } from './data.js?v=16';
-import { tick } from './audio.js?v=16';
-import { ST, LATE } from './state.js?v=16';
-import { chipEls, moveEls, formOf } from './core.js?v=16';
-import { scene, now } from './renderer.js?v=16';
-import { scatterEchoes } from './echoes.js?v=16';
-import { AI } from './creatures.js?v=16';
-import { SEALS } from './seal.js?v=16';
-import { DRAWN } from './shaping.js?v=16';
+import { ELEMENTS, ELEMENT_ORDER, FORMS, forms, MOVES, SENSE_HOW } from './data.js?v=17';
+import { tick } from './audio.js?v=17';
+import { ST, LATE } from './state.js?v=17';
+import { chipEls, moveEls, formOf } from './core.js?v=17';
+import { scene, now } from './renderer.js?v=17';
+import { scatterEchoes } from './echoes.js?v=17';
+import { AI } from './creatures.js?v=17';
+import { SEALS } from './seal.js?v=17';
+import { DRAWN } from './shaping.js?v=17';
 
 // ---------- discipline selection ----------
 export function setForm(key, form) {

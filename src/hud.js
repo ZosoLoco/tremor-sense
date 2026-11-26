@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { ELEMENTS, FORMS } from './data.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { statusEl, formOf } from './core.js?v=15';
-import { renderer, scene } from './renderer.js?v=15';
-import { MAX_HP } from './creatures.js?v=15';
+import { ELEMENTS, FORMS } from './data.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { statusEl, formOf } from './core.js?v=16';
+import { renderer, scene } from './renderer.js?v=16';
+import { MAX_HP } from './creatures.js?v=16';
 
 // ---------- wrist HUD ----------
 const hudCanvas = document.createElement('canvas');

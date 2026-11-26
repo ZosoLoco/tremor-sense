@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms, lookOf } from './data.js?v=15';
-import { play, SFX, tone, thump, thud } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { scene, UP } from './renderer.js?v=15';
-import { pulseUniforms, FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=15';
-import { barriers, addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
-import { echoes, glowMat, ICE, isLive, reveal, hit } from './echoes.js?v=15';
-import { _to, aimAssist, segmentDistance, flat } from './creatures.js?v=15';
-import { ENERGY, waterMat, energyMat, stoneMat, iceMat, earthMat, craggy, particles, smoke, SMOKE, STEAM, DUST, SAND, _fv, fume, PCOL, puff } from './visuals.js?v=15';
+import { ELEMENTS, forms, lookOf } from './data.js?v=16';
+import { play, SFX, tone, thump, thud } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { scene, UP } from './renderer.js?v=16';
+import { pulseUniforms, FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=16';
+import { barriers, addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=16';
+import { echoes, glowMat, ICE, isLive, reveal, hit } from './echoes.js?v=16';
+import { _to, aimAssist, segmentDistance, flat } from './creatures.js?v=16';
+import { ENERGY, waterMat, energyMat, stoneMat, iceMat, earthMat, craggy, particles, smoke, SMOKE, STEAM, DUST, SAND, _fv, fume, PCOL, puff } from './visuals.js?v=16';
 
 // ---------- effects ----------
 const fxGroup = new THREE.Group();

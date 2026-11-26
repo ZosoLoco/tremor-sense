@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { PULSE_SPEED, PULSE_LIFE, MAX_PULSES, ACID } from './data.js?v=15';
-import { thump } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { now } from './renderer.js?v=15';
+import { PULSE_SPEED, PULSE_LIFE, MAX_PULSES, ACID } from './data.js?v=16';
+import { thump } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { now } from './renderer.js?v=16';
 
 // ---------- the pulse material, shared by every room surface ----------
 export const pulseUniforms = {

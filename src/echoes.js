@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { ECHO_COUNT, KINDS, KIND_NAMES, ACID, ELEMENTS } from './data.js?v=15';
-import { blip, tick, hitSound } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { renderer, scene, UP, ZERO, now } from './renderer.js?v=15';
-import { planes } from './room.js?v=15';
-import { clearBarriers, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
+import { ECHO_COUNT, KINDS, KIND_NAMES, ACID, ELEMENTS } from './data.js?v=16';
+import { blip, tick, hitSound } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { renderer, scene, UP, ZERO, now } from './renderer.js?v=16';
+import { planes } from './room.js?v=16';
+import { clearBarriers, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=16';
 
 // ---------- echoes: the hidden things a sense reveals ----------
 export const echoes = [];

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { KINDS, ELEMENTS, FORMS, forms, MOVES } from './data.js?v=15';
-import { play, SFX, FAMILIAR_NOTE, moveSound, tone, thump } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { UP, ZERO } from './renderer.js?v=15';
-import { collide, lineOfSight } from './collision.js?v=15';
-import { echoes, glowMat, hit } from './echoes.js?v=15';
-import { aimAssist, flat } from './creatures.js?v=15';
-import { energyMat, puff } from './visuals.js?v=15';
-import { addEffect, castBolt, castCone, castColumn, castRing, castWall, castFault, zap, castBeam, castVoid, castLance, raiseThrall, castLegion } from './effects.js?v=15';
+import { KINDS, ELEMENTS, FORMS, forms, MOVES } from './data.js?v=16';
+import { play, SFX, FAMILIAR_NOTE, moveSound, tone, thump } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { UP, ZERO } from './renderer.js?v=16';
+import { collide, lineOfSight } from './collision.js?v=16';
+import { echoes, glowMat, hit } from './echoes.js?v=16';
+import { aimAssist, flat } from './creatures.js?v=16';
+import { energyMat, puff } from './visuals.js?v=16';
+import { addEffect, castBolt, castCone, castColumn, castRing, castWall, castFault, zap, castBeam, castVoid, castLance, raiseThrall, castLegion } from './effects.js?v=16';
 
 // ---------- what each discipline's blast and shockwave are actually made of ----------
 // Things that come up, stand a moment and go: roots, claws, spikes, shafts of light.

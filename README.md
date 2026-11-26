@@ -269,3 +269,17 @@ In the browser preview: `charge` and `draw` chips (press, hold or drag, release)
 - **Threat arrows.** Something winding up, or already thrown, outside your view: a red arrow at the edge of your sight
   points to it and a low note sounds.
 - **Sense hints.** Picking a discipline says how its sense is called.
+
+## Build 16
+
+- **The room tidies itself.** The room's own objects each have a place. Anything else (rubble, ice shards, stones a
+  move left behind) is litter and goes after about twelve seconds at rest. A room object that is destroyed, or knocked
+  away and left lying, comes back to its place about twenty seconds later. Ten objects at most; water sources last 25
+  seconds; hauled walls 18.
+- **Weapons are different kinds of thing** (draw a V; Lumen's is its sweep):
+  pyro sword (a hard swing throws an arc of fire), lumen blade (parries), terra hammer (launches; strike any surface
+  with the head for a slam there), aero chakram (thrown on the swing, cuts a line, returns), gravis mace (drags
+  creatures toward the head, then lands hard), flora whip (long, lagging tip, roots), astra staff (point it at a
+  creature and it calls stars down, never touches), umbra scythe (one stroke hits everything round you), necro spear
+  (only a forward thrust counts; runs through a line twice its length).
+- Tests: `hands.py` drives the hand loop with made-up hands; `checkimports.py` checks every import resolves.

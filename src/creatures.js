@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { PULSE_SPEED, PULSE_LIFE, KINDS, REVEAL_TIME, ACID, ELEMENTS } from './data.js?v=15';
-import { play, SFX, tone, thump } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { scene, UP, ZERO } from './renderer.js?v=15';
-import { pulseUniforms } from './pulse.js?v=15';
-import { collide, lineOfSight } from './collision.js?v=15';
-import { echoes, ICE, STEEL_TINT, roomBounds, isOpen, scatterEchoes, isLive, reveal, hit } from './echoes.js?v=15';
+import { PULSE_SPEED, PULSE_LIFE, KINDS, REVEAL_TIME, ACID, ELEMENTS } from './data.js?v=16';
+import { play, SFX, tone, thump } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { scene, UP, ZERO } from './renderer.js?v=16';
+import { pulseUniforms } from './pulse.js?v=16';
+import { collide, lineOfSight } from './collision.js?v=16';
+import { echoes, ICE, STEEL_TINT, roomBounds, isOpen, scatterEchoes, isLive, reveal, hit } from './echoes.js?v=16';
 
 // ---------- creature behaviour ----------
 // They drift around the room out of sight, and every few seconds one of them stops, swells, and spits a shard at you.

@@ -232,5 +232,5 @@ export const MOVES = {
 export const SENSE_HOW = { terra: 'palm on any surface', flora: 'palm on any surface', aero: 'clap', aqua: 'raise an open palm', lumen: 'raise an open palm, facing out', astra: 'raise an open palm, facing out',
   pyro: 'raise a fist and hold', gravis: 'raise a fist and hold', morph: 'raise a fist and hold', umbra: 'always on; raise a fist to hide', necro: 'raise a fist and hold' };
 // Two hands, closed together and hauled: a great wall out of whatever you were reaching at. Every discipline has one.
-export const HAUL = { name: 'Great Wall', kind: 'wall', ram: 5, width: 2.6, height: 1.9, stand: 30 };
+export const HAUL = { name: 'Great Wall', kind: 'wall', ram: 5, width: 2.6, height: 1.9, stand: 18 };
 for (const k in MOVES) MOVES[k].haul = { ...HAUL, name: { terra: 'Great Wall', aqua: 'Tide Wall', pyro: 'Wall of Fire', aero: 'Wind Wall', flora: 'Thicket', lumen: 'Ward', gravis: 'Event Horizon', astra: 'Aurora Wall', morph: 'Bone Wall', umbra: 'Curtain of Night', necro: 'Ossuary' }[k] || 'Great Wall' };

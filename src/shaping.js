@@ -1,19 +1,19 @@
 import * as THREE from 'three';
-import { ELEMENTS, FORMS, forms, MOVES } from './data.js?v=15';
-import { play, SFX, FORM_SFX, moveSound, thump, tick } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { summonBlade, WEAPON } from './constructs.js?v=15';
-import { formOf } from './core.js?v=15';
-import { scene, UP, ZERO, now } from './renderer.js?v=15';
-import { FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=15';
-import { addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
-import { echoes, glowMat, roomBounds, isLive, reveal, hit } from './echoes.js?v=15';
-import { segmentDistance, flat } from './creatures.js?v=15';
-import { waterMat, energyMat, iceMat, earthMat, craggy, particles, STEAM, thinned, fume, PCOL, puff } from './visuals.js?v=15';
-import { addEffect, castBolt, ribbonGeo, zap, raiseThrall } from './effects.js?v=15';
-import { cast } from './flourish.js?v=15';
-import { objects, spawnObject, spawnCloud, ignite, kick, sendBack, turn, explode, crushObject } from './objects.js?v=15';
-import { WATER_MAX, addSource, water } from './water.js?v=15';
+import { ELEMENTS, FORMS, forms, MOVES } from './data.js?v=16';
+import { play, SFX, FORM_SFX, moveSound, thump, tick } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { summonBlade, WEAPON } from './constructs.js?v=16';
+import { formOf } from './core.js?v=16';
+import { scene, UP, ZERO, now } from './renderer.js?v=16';
+import { FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=16';
+import { addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=16';
+import { echoes, glowMat, roomBounds, isLive, reveal, hit } from './echoes.js?v=16';
+import { segmentDistance, flat } from './creatures.js?v=16';
+import { waterMat, energyMat, iceMat, earthMat, craggy, particles, STEAM, thinned, fume, PCOL, puff } from './visuals.js?v=16';
+import { addEffect, castBolt, ribbonGeo, zap, raiseThrall } from './effects.js?v=16';
+import { cast } from './flourish.js?v=16';
+import { objects, spawnObject, spawnCloud, ignite, kick, sendBack, turn, explode, crushObject } from './objects.js?v=16';
+import { WATER_MAX, addSource, water } from './water.js?v=16';
 
 // ---------- shaping: pinch ----------
 // A pinch (thumb and index together, the other fingers out) is the hands-on verb. What it does depends on the discipline.

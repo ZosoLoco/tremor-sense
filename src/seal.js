@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { KINDS, ELEMENTS, MOVES } from './data.js?v=15';
-import { play, SFX, thump, tick, castSound } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { UP } from './renderer.js?v=15';
-import { pulseUniforms } from './pulse.js?v=15';
-import { lineOfSight } from './collision.js?v=15';
-import { echoes, glowMat, roomBounds, reveal, hit } from './echoes.js?v=15';
-import { particles, PCOL, puff } from './visuals.js?v=15';
-import { addEffect, castBolt, thralls, raiseThrall } from './effects.js?v=15';
-import { armour, cast } from './flourish.js?v=15';
-import { objects, kick, sendBack, turn, explode } from './objects.js?v=15';
-import { sources, WATER_MAX, water } from './water.js?v=15';
+import { KINDS, ELEMENTS, MOVES } from './data.js?v=16';
+import { play, SFX, thump, tick, castSound } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { UP } from './renderer.js?v=16';
+import { pulseUniforms } from './pulse.js?v=16';
+import { lineOfSight } from './collision.js?v=16';
+import { echoes, glowMat, roomBounds, reveal, hit } from './echoes.js?v=16';
+import { particles, PCOL, puff } from './visuals.js?v=16';
+import { addEffect, castBolt, thralls, raiseThrall } from './effects.js?v=16';
+import { armour, cast } from './flourish.js?v=16';
+import { objects, kick, sendBack, turn, explode } from './objects.js?v=16';
+import { sources, WATER_MAX, water } from './water.js?v=16';
 
 // ---------- the seal ----------
 // Two fingers up (index and middle, the others folded), held still for a moment. Not an attack with a shape: each

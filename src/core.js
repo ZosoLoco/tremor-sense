@@ -34,8 +34,8 @@
 
 
 
-import { forms } from './data.js?v=15';
-import { ST, LATE } from './state.js?v=15';
+import { forms } from './data.js?v=16';
+import { ST, LATE } from './state.js?v=16';
 export const statusEl = document.getElementById('status');
 export const hintEl = document.getElementById('hint');
 export const enterBtn = document.getElementById('enter');

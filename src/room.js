@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { scene } from './renderer.js?v=15';
-import { roomMat, edgeGroup, dressed, dress } from './pulse.js?v=15';
+import { scene } from './renderer.js?v=16';
+import { roomMat, edgeGroup, dressed, dress } from './pulse.js?v=16';
 
 // ---------- room surfaces ----------
 const roomGroup = new THREE.Group();     // real surfaces from the headset

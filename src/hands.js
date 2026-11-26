@@ -1,22 +1,22 @@
 import * as THREE from 'three';
-import { TOUCH_ON, SLAM_ON, TOUCH_OFF, CURL_OPEN, CURL_FIST, PUNCH_SPEED, PUSH_SPEED, LIFT_SPEED, SWEEP_SPEED, REARM_SPEED, CAST_COOLDOWN, HOLD_STILL, HOLD_TIME, POINT_SPEED, CLAP_ON, CLAP_OFF, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, FIST_SENSE, PALM_SENSE, TOUCH_SENSE, FORMS, MOVES } from './data.js?v=15';
-import { play, SFX, tick, thump } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { formOf } from './core.js?v=15';
-import { renderer, UP, now } from './renderer.js?v=15';
-import { firePulse } from './pulse.js?v=15';
-import { nearestSurface } from './room.js?v=15';
-import { colliders, nearestRoomSurface, collide } from './collision.js?v=15';
-import { aimAssist } from './creatures.js?v=15';
-import { cast } from './flourish.js?v=15';
-import { addSource } from './water.js?v=15';
-import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, CHARGE_MIN, CHARGE_MAX, CHARGE_REACH, showCharge, throwCharged } from './grip.js?v=15';
-import { resonate } from './seal.js?v=15';
-import { guard } from './guard.js?v=15';
-import { PINCH_ON, PINCH_OFF, stream, startStream, DRAWN, drawBegin, drawAdd, drawEnd, currents, _cv, _cp, bendCurrents } from './shaping.js?v=15';
-import { rootSense, senseAero, held } from './senses.js?v=15';
-import { setForm, cycleForm, selectElement, menuGroup, menuOrbs, menuPlate, formPlates, WHEEL_R, options, switchMeshes, flipSwitch, readout, noteGesture, drawReadout } from './selection.js?v=15';
-import { hud, drawHud } from './hud.js?v=15';
+import { TOUCH_ON, SLAM_ON, TOUCH_OFF, CURL_OPEN, CURL_FIST, PUNCH_SPEED, PUSH_SPEED, LIFT_SPEED, SWEEP_SPEED, REARM_SPEED, CAST_COOLDOWN, HOLD_STILL, HOLD_TIME, POINT_SPEED, CLAP_ON, CLAP_OFF, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, FIST_SENSE, PALM_SENSE, TOUCH_SENSE, FORMS, MOVES } from './data.js?v=16';
+import { play, SFX, tick, thump } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { formOf } from './core.js?v=16';
+import { renderer, UP, now } from './renderer.js?v=16';
+import { firePulse } from './pulse.js?v=16';
+import { nearestSurface } from './room.js?v=16';
+import { colliders, nearestRoomSurface, collide } from './collision.js?v=16';
+import { aimAssist } from './creatures.js?v=16';
+import { cast } from './flourish.js?v=16';
+import { addSource } from './water.js?v=16';
+import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, CHARGE_MIN, CHARGE_MAX, CHARGE_REACH, showCharge, throwCharged } from './grip.js?v=16';
+import { resonate } from './seal.js?v=16';
+import { guard } from './guard.js?v=16';
+import { PINCH_ON, PINCH_OFF, stream, startStream, DRAWN, drawBegin, drawAdd, drawEnd, currents, _cv, _cp, bendCurrents } from './shaping.js?v=16';
+import { rootSense, senseAero, held } from './senses.js?v=16';
+import { setForm, cycleForm, selectElement, menuGroup, menuOrbs, menuPlate, formPlates, WHEEL_R, options, switchMeshes, flipSwitch, readout, noteGesture, drawReadout } from './selection.js?v=16';
+import { hud, drawHud } from './hud.js?v=16';
 
 // ---------- hands ----------
 export const waterAnchor = new THREE.Vector3();
@@ -152,7 +152,7 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!ST.sawHands && (L.valid || R.valid)) { ST.sawHands = true; ST.hudNote = 'build 15. open palm toward you: pick'; drawHud(); }
+  if (!ST.sawHands && (L.valid || R.valid)) { ST.sawHands = true; ST.hudNote = 'build 16. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;

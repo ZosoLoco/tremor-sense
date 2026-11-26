@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms } from './data.js?v=15';
-import { tone, thump, tick, thud } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { scene, UP, ZERO } from './renderer.js?v=15';
-import { FIRE_LIGHT, LAVA_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=15';
-import { collide, nearestRoomSurface } from './collision.js?v=15';
-import { echoes, glowMat, roomBounds, spawnEye, isOpen, isLive, reveal, hit } from './echoes.js?v=15';
-import { HOSTILE, playerHurt, segmentDistance } from './creatures.js?v=15';
-import { waterMat, energyMat, stoneMat, craggy, particles, SMOKE, STEAM, DUST, SAND, thinned, fume, PCOL, puff } from './visuals.js?v=15';
-import { addEffect } from './effects.js?v=15';
+import { ELEMENTS, forms } from './data.js?v=16';
+import { tone, thump, tick, thud } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { scene, UP, ZERO, now } from './renderer.js?v=16';
+import { FIRE_LIGHT, LAVA_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=16';
+import { collide, nearestRoomSurface } from './collision.js?v=16';
+import { echoes, glowMat, roomBounds, spawnEye, isOpen, isLive, reveal, hit } from './echoes.js?v=16';
+import { HOSTILE, playerHurt, segmentDistance } from './creatures.js?v=16';
+import { waterMat, energyMat, stoneMat, craggy, particles, SMOKE, STEAM, DUST, SAND, thinned, fume, PCOL, puff } from './visuals.js?v=16';
+import { addEffect } from './effects.js?v=16';
 
 // ---------- objects: loose things in the room ----------
 // Simple bodies: a sphere each for collision, gravity, bounce off the real room.
@@ -29,7 +29,7 @@ const OBJ = {
 };
 export const HEAT_TIME = 10;                               // seconds stone and steel stay hot
 const ROUND_OBJECTS = ['crate', 'crate', 'bigcrate', 'keg', 'keg', 'barrel', 'barrel', 'stone', 'stone', 'boulder', 'ball', 'anvil'];
-export const MAX_OBJECTS = 12;        // the room was getting crowded: half as many loose things, at most
+export const MAX_OBJECTS = 10;        // the room was getting crowded: half as many loose things, at most
 export const GRIP = { aero: 'Wind Grip', aqua: 'Water Grip', terra: 'Unearth', pyro: 'Fireball', lumen: 'Sunburst', gravis: 'Gravity Grip', flora: 'Vine Grip', astra: 'Meteor Shower', morph: 'Grapple', umbra: 'Black Sun', necro: 'Legion' };
 export const objects = [];
 const objGroup = new THREE.Group();
@@ -65,7 +65,7 @@ export function spawnObject(kind, pos) {
   mesh.rotation.y = Math.random() * 6.28;
   objGroup.add(mesh);
   const o = { kind, def: OBJ[kind], mesh, pos: pos.clone(), vel: new THREE.Vector3(), rest: false, held: false, dead: false,
-    burnUntil: -1, fuse: -1, hitT: -9 };
+    burnUntil: -1, fuse: -1, hitT: -9, born: now(), base: null };
   objects.push(o);
   return o;
 }
@@ -81,7 +81,29 @@ function destroyObject(o, t) {
     LATE.addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t);
   }
 }
+// The room starts with a few things in it, each with a place. Everything else (rubble, shards of ice, stones a move
+// left behind) is litter: it lasts a short while and goes. If one of the room's own things is destroyed, or is knocked
+// away and left lying, a new one comes back to its place after a while. So the room drifts back to how it began.
+const LITTER_LIFE = 12, STRAY_LIFE = 25, RESPAWN_AFTER = 20;
+const baseSlots = [];
+function tidy(t) {
+  for (const o of objects) {
+    if (o.dead || o.held || o.hostile || o.def.cloud) continue;
+    if (!o.base) { if (t - o.born > LITTER_LIFE && o.rest) { o.dead = true; puff('terra', o.pos, 6, 0.8, {}); } else if (t - o.born > LITTER_LIFE * 2) o.dead = true; }
+    else if (o.pos.distanceTo(o.base.pos) > 1.2 && o.rest) { if (!(o.strayT > 0)) o.strayT = t; else if (t - o.strayT > STRAY_LIFE) { o.dead = true; puff('terra', o.pos, 6, 0.8, {}); } }
+    else o.strayT = -1;
+  }
+  for (const slot of baseSlots) {
+    if (slot.obj && !slot.obj.dead && objects.includes(slot.obj)) continue;
+    if (slot.gone < 0) { slot.gone = t; continue; }
+    if (t - slot.gone < RESPAWN_AFTER || !isOpen(slot.pos, OBJ[slot.kind].r + 0.05, spawnEye(), false)) continue;
+    const made = spawnObject(slot.kind, slot.pos.clone().setY(slot.pos.y + 0.3));
+    made.base = slot; slot.obj = made; slot.gone = -1;
+    puff('aero', slot.pos, 14, 1.2, {});
+  }
+}
 export function scatterObjects() {
+  baseSlots.length = 0;
   for (const o of objects) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); }
   objects.length = 0;
   const box = roomBounds();
@@ -99,7 +121,8 @@ export function scatterObjects() {
       at.set(top.x, y + r + 0.01, top.z);
       if (taken.some(q => q.distanceTo(at) < r + 0.5)) continue;
       if (!isOpen(at, r + 0.08, eye, false)) continue;
-      spawnObject(kind, at.clone()).rest = true;
+      const made = spawnObject(kind, at.clone()); made.rest = true;
+      made.base = { kind, pos: at.clone(), gone: -1 }; baseSlots.push(made.base); made.base.obj = made;
       taken.push(at.clone());
       placed = true;
     }
@@ -267,7 +290,9 @@ export function crushObject(o, t) {
 }
 
 const _on = new THREE.Vector3(), _op = new THREE.Vector3(), _od = new THREE.Vector3(), _oprev = new THREE.Vector3();
+let tidyAt = 0;
 export function updateObjects(t, dt) {
+  if (t > tidyAt) { tidyAt = t + 1; tidy(t); }
   for (let i = objects.length - 1; i >= 0; i--) {
     const o = objects[i];
     if (o.dead) { objGroup.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); objects.splice(i, 1); continue; }

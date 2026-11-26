@@ -1,13 +1,13 @@
-import { ensureAudio } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { statusEl, hintEl, enterBtn, uiEl } from './core.js?v=15';
-import { renderer, scene, PREVIEW_BG } from './renderer.js?v=15';
-import { pulseUniforms } from './pulse.js?v=15';
-import { previewGroup, fallbackFloor, clearRoom } from './room.js?v=15';
-import { scatterEchoes } from './echoes.js?v=15';
-import { menuGroup, readout } from './selection.js?v=15';
-import { hud, drawHud } from './hud.js?v=15';
-import { newHand, handState, onSelectStart, onSqueezeStart } from './hands.js?v=15';
+import { ensureAudio } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { statusEl, hintEl, enterBtn, uiEl } from './core.js?v=16';
+import { renderer, scene, PREVIEW_BG } from './renderer.js?v=16';
+import { pulseUniforms } from './pulse.js?v=16';
+import { previewGroup, fallbackFloor, clearRoom } from './room.js?v=16';
+import { scatterEchoes } from './echoes.js?v=16';
+import { menuGroup, readout } from './selection.js?v=16';
+import { hud, drawHud } from './hud.js?v=16';
+import { newHand, handState, onSelectStart, onSqueezeStart } from './hands.js?v=16';
 
 // ---------- session ----------
 ST.xrSupported = false;

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { FORM_LOOK } from './data.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { scene } from './renderer.js?v=15';
-import { pulseUniforms } from './pulse.js?v=15';
+import { FORM_LOOK } from './data.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { scene } from './renderer.js?v=16';
+import { pulseUniforms } from './pulse.js?v=16';
 
 // ---------- visual kit: what each discipline is made of ----------
 // Pyro, Aqua and Aero are flowing noise in their own colours. Terra is solid, faceted stone.

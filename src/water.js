@@ -1,20 +1,20 @@
 import * as THREE from 'three';
-import { castSound } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { scene, UP } from './renderer.js?v=15';
-import { lineOfSight } from './collision.js?v=15';
-import { echoes, isLive, hit } from './echoes.js?v=15';
-import { _to, segmentDistance, flat } from './creatures.js?v=15';
-import { waterMat, energyMat, particles, PCOL, puff } from './visuals.js?v=15';
-import { addEffect } from './effects.js?v=15';
-import { objects, kick } from './objects.js?v=15';
+import { castSound } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { scene, UP } from './renderer.js?v=16';
+import { lineOfSight } from './collision.js?v=16';
+import { echoes, isLive, hit } from './echoes.js?v=16';
+import { _to, segmentDistance, flat } from './creatures.js?v=16';
+import { waterMat, energyMat, particles, PCOL, puff } from './visuals.js?v=16';
+import { addEffect } from './effects.js?v=16';
+import { objects, kick } from './objects.js?v=16';
 
 // ---------- water: sources, and the water you carry ----------
 // Aqua works best with water to hand. Put an open palm on any surface and water wells up there for a while.
 // While a source is running, water streams across the room to you and gathers at your hand, up to three measures.
 // Each Aqua move spends one and comes out bigger and harder. With none, the moves still work, at half strength.
 export const sources = [];
-export const SOURCE_LIFE = 35, WATER_MAX = 4, WATER_FILL = 1.3;      // seconds a source runs; measures you can carry; seconds per measure
+export const SOURCE_LIFE = 25, WATER_MAX = 4, WATER_FILL = 1.3;      // seconds a source runs; measures you can carry; seconds per measure
 export function addSource(point, normal, t, life = SOURCE_LIFE) {
   if (sources.length >= 4) { const old = sources.shift(); scene.remove(old.mesh); old.mesh.geometry.dispose(); old.mesh.material.dispose(); }
   const n = (normal || UP).clone().normalize();

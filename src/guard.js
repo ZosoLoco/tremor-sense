@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { ELEMENTS } from './data.js?v=15';
-import { play, SFX } from './audio.js?v=15';
-import { ST, LATE } from './state.js?v=15';
-import { scene, camera } from './renderer.js?v=15';
-import { glowMat } from './echoes.js?v=15';
-import { waterMat, energyMat, earthMat, puff } from './visuals.js?v=15';
-import { objects, sendBack, turn } from './objects.js?v=15';
-import { WATER_MAX, water } from './water.js?v=15';
+import { ELEMENTS } from './data.js?v=16';
+import { play, SFX } from './audio.js?v=16';
+import { ST, LATE } from './state.js?v=16';
+import { scene, camera } from './renderer.js?v=16';
+import { glowMat } from './echoes.js?v=16';
+import { waterMat, energyMat, earthMat, puff } from './visuals.js?v=16';
+import { objects, sendBack, turn } from './objects.js?v=16';
+import { WATER_MAX, water } from './water.js?v=16';
 
 // ---------- guard ----------
 // Forearms crossed in front of you: a shield in the colour of whatever you are bending. While it is up, nothing thrown

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ST, LATE } from './state.js?v=15';
+import { ST, LATE } from './state.js?v=16';
 
 // ---------- renderer ----------
 export const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });

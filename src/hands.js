@@ -1,26 +1,26 @@
 import * as THREE from 'three';
-import { TOUCH_ON, SLAM_ON, TOUCH_OFF, CURL_OPEN, CURL_FIST, PUNCH_SPEED, PUSH_SPEED, LIFT_SPEED, SWEEP_SPEED, REARM_SPEED, CAST_COOLDOWN, HOLD_STILL, HOLD_TIME, POINT_SPEED, CLAP_ON, CLAP_OFF, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, FIST_SENSE, PALM_SENSE, TOUCH_SENSE, FORMS, MOVES } from './data.js?v=14';
-import { play, SFX, tick, thump } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { formOf } from './core.js?v=14';
-import { renderer, UP, now } from './renderer.js?v=14';
-import { firePulse } from './pulse.js?v=14';
-import { nearestSurface } from './room.js?v=14';
-import { colliders, nearestRoomSurface, collide } from './collision.js?v=14';
-import { aimAssist } from './creatures.js?v=14';
-import { cast } from './flourish.js?v=14';
-import { addSource } from './water.js?v=14';
-import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, CHARGE_MIN, CHARGE_MAX, CHARGE_REACH, showCharge, throwCharged } from './grip.js?v=14';
-import { resonate } from './seal.js?v=14';
-import { guard } from './guard.js?v=14';
-import { PINCH_ON, PINCH_OFF, stream, startStream, DRAWN, drawBegin, drawAdd, drawEnd, currents, _cv, _cp, bendCurrents } from './shaping.js?v=14';
-import { rootSense, senseAero, held } from './senses.js?v=14';
-import { setForm, cycleForm, selectElement, menuGroup, menuOrbs, menuPlate, formPlates, WHEEL_R, options, switchMeshes, flipSwitch, readout, noteGesture, drawReadout } from './selection.js?v=14';
-import { hud, drawHud } from './hud.js?v=14';
+import { TOUCH_ON, SLAM_ON, TOUCH_OFF, CURL_OPEN, CURL_FIST, PUNCH_SPEED, PUSH_SPEED, LIFT_SPEED, SWEEP_SPEED, REARM_SPEED, CAST_COOLDOWN, HOLD_STILL, HOLD_TIME, POINT_SPEED, CLAP_ON, CLAP_OFF, ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, FIST_SENSE, PALM_SENSE, TOUCH_SENSE, FORMS, MOVES } from './data.js?v=15';
+import { play, SFX, tick, thump } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { formOf } from './core.js?v=15';
+import { renderer, UP, now } from './renderer.js?v=15';
+import { firePulse } from './pulse.js?v=15';
+import { nearestSurface } from './room.js?v=15';
+import { colliders, nearestRoomSurface, collide } from './collision.js?v=15';
+import { aimAssist } from './creatures.js?v=15';
+import { cast } from './flourish.js?v=15';
+import { addSource } from './water.js?v=15';
+import { findGrabTarget, beginHold, updateHold, endHold, reticles, showReticle, hideOrbs, CHARGE_MIN, CHARGE_MAX, CHARGE_REACH, showCharge, throwCharged } from './grip.js?v=15';
+import { resonate } from './seal.js?v=15';
+import { guard } from './guard.js?v=15';
+import { PINCH_ON, PINCH_OFF, stream, startStream, DRAWN, drawBegin, drawAdd, drawEnd, currents, _cv, _cp, bendCurrents } from './shaping.js?v=15';
+import { rootSense, senseAero, held } from './senses.js?v=15';
+import { setForm, cycleForm, selectElement, menuGroup, menuOrbs, menuPlate, formPlates, WHEEL_R, options, switchMeshes, flipSwitch, readout, noteGesture, drawReadout } from './selection.js?v=15';
+import { hud, drawHud } from './hud.js?v=15';
 
 // ---------- hands ----------
 export const waterAnchor = new THREE.Vector3();
-S.waterAnchorOn = false;
+ST.waterAnchorOn = false;
 export function newHand() {
   return {
     valid: false, seen: false, armed: false, ready: true, clapBlock: -1,
@@ -39,7 +39,7 @@ export const handState = { left: newHand(), right: newHand() };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _tip = new THREE.Vector3();
 export const _vhat = new THREE.Vector3(), _fwd = new THREE.Vector3(), _raw = new THREE.Vector3(), _off = new THREE.Vector3();
 const TIPS = ['index-finger-tip', 'middle-finger-tip', 'ring-finger-tip', 'pinky-finger-tip'];
-S.sawHands = false;
+ST.sawHands = false;
 let clapArmed = true;
 let lastMenuPick = -1, menuArmed = true;
 
@@ -145,14 +145,14 @@ function readHand(frame, source, refSpace, st, dt) {
 }
 
 export function updateHands(frame, refSpace, t, dt, viewerPos) {
-  _fwd.set(0, 0, -1).applyQuaternion(L.viewerQuat);
+  _fwd.set(0, 0, -1).applyQuaternion(LATE.viewerQuat);
   handState.left.valid = handState.right.valid = false;
-  S.streamCtl = null;                                // the hand that owns the stream says so again every frame
+  ST.streamCtl = null;                                // the hand that owns the stream says so again every frame
   for (const source of frame.session.inputSources) {
     if (source.hand && handState[source.handedness]) readHand(frame, source, refSpace, handState[source.handedness], dt);
   }
   const L = handState.left, R = handState.right;
-  if (!S.sawHands && (L.valid || R.valid)) { S.sawHands = true; S.hudNote = 'build 14. open palm toward you: pick'; drawHud(); }
+  if (!ST.sawHands && (L.valid || R.valid)) { ST.sawHands = true; ST.hudNote = 'build 15. open palm toward you: pick'; drawHud(); }
 
   // Palm menu: an open, slow palm turned toward your face. The other index finger picks.
   let menuHand = null;
@@ -177,19 +177,19 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
       const d = tip ? tip.distanceTo(orb.position) : 9;
       if (d < hoverDist) { hoverDist = d; hover = i; }
     });
-    menuOrbs.forEach((orb, i) => orb.scale.setScalar(ELEMENT_ORDER[i] === S.selected ? 1.7 : i === hover ? 1.4 : 1));
+    menuOrbs.forEach((orb, i) => orb.scale.setScalar(ELEMENT_ORDER[i] === ST.selected ? 1.7 : i === hover ? 1.4 : 1));
     if (hover >= 0 && hoverDist < 0.027) touching = hover;
-    const shownKey = hover >= 0 ? ELEMENT_ORDER[hover] : S.selected;
+    const shownKey = hover >= 0 ? ELEMENT_ORDER[hover] : ST.selected;
     menuPlate.mesh.position.copy(hub).addScaledVector(fing, 0.02);
     menuPlate.mesh.lookAt(viewerPos);
-    menuPlate.draw(ELEMENTS[shownKey].label, `#${ELEMENTS[shownKey].color.getHexString()}`, false, hover >= 0 && shownKey !== S.selected ? MOVES[shownKey].punch.name + ' · ' + MOVES[shownKey].slam.name + ' · ' + DRAWN[shownKey] : formOf(S.selected));
-    const list = FORMS[S.selected];
+    menuPlate.draw(ELEMENTS[shownKey].label, `#${ELEMENTS[shownKey].color.getHexString()}`, false, hover >= 0 && shownKey !== ST.selected ? MOVES[shownKey].punch.name + ' · ' + MOVES[shownKey].slam.name + ' · ' + DRAWN[shownKey] : formOf(ST.selected));
+    const list = FORMS[ST.selected];
     formPlates.forEach((pl, j) => {
       pl.mesh.visible = j < list.length;
       if (j >= list.length) return;
       pl.mesh.position.copy(hub).addScaledVector(fing, -0.022 - (j >> 1) * 0.024).addScaledVector(menuHand.across, ((j & 1) - 0.5) * 0.05);
       pl.mesh.lookAt(viewerPos);
-      pl.draw(list[j], `#${ELEMENTS[S.selected].color.getHexString()}`, formOf(S.selected) === list[j]);
+      pl.draw(list[j], `#${ELEMENTS[ST.selected].color.getHexString()}`, formOf(ST.selected) === list[j]);
       if (tip && tip.distanceTo(pl.mesh.position) < 0.02) touching = 200 + j;
     });
     _off.subVectors(menuHand.wrist, menuHand.knuckle).normalize();          // toward the wrist: the second row sits below the orbs
@@ -203,9 +203,9 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (touching < 0) menuArmed = true;
     else if (menuArmed && t - lastMenuPick > 0.25) {
       menuArmed = false; lastMenuPick = t;
-      if (touching >= 200) { setForm(S.selected, FORMS[S.selected][touching - 200]); tick(); S.hudNote = `${ELEMENTS[S.selected].label.toLowerCase()} as ${formOf(S.selected)}`; S.lastCast = S.selected; drawHud(); }
+      if (touching >= 200) { setForm(ST.selected, FORMS[ST.selected][touching - 200]); tick(); ST.hudNote = `${ELEMENTS[ST.selected].label.toLowerCase()} as ${formOf(ST.selected)}`; ST.lastCast = ST.selected; drawHud(); }
       else if (touching >= 100) flipSwitch(touching - 100);
-      else if (ELEMENT_ORDER[touching] !== S.selected) selectElement(ELEMENT_ORDER[touching]);
+      else if (ELEMENT_ORDER[touching] !== ST.selected) selectElement(ELEMENT_ORDER[touching]);
     }
   }
 
@@ -217,7 +217,7 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
       clapArmed = false;
       L.clapBlock = R.clapBlock = t;
       noteGesture('clap');
-      if (S.selected === 'aero') senseAero(_off.addVectors(L.palm, R.palm).multiplyScalar(0.5).clone(), t);
+      if (ST.selected === 'aero') senseAero(_off.addVectors(L.palm, R.palm).multiplyScalar(0.5).clone(), t);
     }
   }
 
@@ -233,8 +233,8 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
       haul.grabT = -9; haul.openT = -9;
       L.ready = R.ready = false; L.charge = R.charge = 0; L.lastCast = R.lastCast = t;
       noteGesture('haul'); thump();
-      MOVES[S.selected].haul.width = Math.min(Math.max(haul.span * 3.4, 1.6), 3.4);
-      cast(S.selected, 'haul', { hand: haul.from.clone(), dir: haul.dir.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), t, power: 1.6 });
+      MOVES[ST.selected].haul.width = Math.min(Math.max(haul.span * 3.4, 1.6), 3.4);
+      cast(ST.selected, 'haul', { hand: haul.from.clone(), dir: haul.dir.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), t, power: 1.6 });
     } else if (!bothFist && !bothOpen) { if (t - haul.grabT > 1.3) haul.grabT = -9; }
   }
   // Guard: wrists crossed and held up in front of the chest.
@@ -253,14 +253,14 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     if (!st.valid || st === menuHand || guard.on) continue;
     if (st.seal && st.speed < 0.7 && st.palm.y > viewerPos.y - 0.55 && !st.hold) {
       st.sealT += dt; st.ready = false; st.charge = 0;
-      if (st.sealT > 0.35 && st.sealArmed) { st.sealArmed = false; noteGesture('seal'); resonate(S.selected, t); }
+      if (st.sealT > 0.35 && st.sealArmed) { st.sealArmed = false; noteGesture('seal'); resonate(ST.selected, t); }
       continue;
     }
     st.sealT = 0; if (!st.seal) st.sealArmed = true;
     if ((st.midEdge || st.ringEdge) && t - st.quickT > 0.5 && !st.hold && !(stream.on && stream.owner === st)) {
       st.quickT = t; st.ready = false;
-      if (st.midEdge) { noteGesture('middle pinch'); const back = S.prevSelected; selectElement(back, true); play(SFX.swap); S.hudNote = `${ELEMENTS[S.selected].label.toLowerCase()} ready`; S.lastCast = S.selected; drawHud(); }
-      else { noteGesture('ring pinch'); cycleForm(S.selected); }
+      if (st.midEdge) { noteGesture('middle pinch'); const back = ST.prevSelected; selectElement(back, true); play(SFX.swap); ST.hudNote = `${ELEMENTS[ST.selected].label.toLowerCase()} ready`; ST.lastCast = ST.selected; drawHud(); }
+      else { noteGesture('ring pinch'); cycleForm(ST.selected); }
       st.midEdge = st.ringEdge = false;
       continue;
     }
@@ -276,20 +276,20 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
       if (isFist && hitFist.dist < SLAM_ON) {
         st.armed = false; st.lastTouch = t; st.ready = false;
         const struckSurface = nearestRoomSurface(st.knuckle, 0.35);
-        cast(S.selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: hitFist.point, normal: struckSurface ? struckSurface.normal : UP.clone(), t });
+        cast(ST.selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: hitFist.point, normal: struckSurface ? struckSurface.normal : UP.clone(), t });
       } else if (!isFist && hitPalm.dist < TOUCH_ON) {
         st.armed = false; st.lastTouch = t; st.ready = false;
         noteGesture('palm on surface');
-        if (TOUCH_SENSE[S.selected]) {
+        if (TOUCH_SENSE[ST.selected]) {
           firePulse(hitPalm.point);
-          if (S.selected === 'flora') rootSense(hitPalm.point, t);
-          play(SFX[S.selected].sense); S.hudNote = ELEMENTS[S.selected].sense.toLowerCase(); S.lastCast = S.selected; drawHud();
+          if (ST.selected === 'flora') rootSense(hitPalm.point, t);
+          play(SFX[ST.selected].sense); ST.hudNote = ELEMENTS[ST.selected].sense.toLowerCase(); ST.lastCast = ST.selected; drawHud();
         } else {
-          if (S.selected === 'aqua') {
+          if (ST.selected === 'aqua') {
             const surf = nearestRoomSurface(st.palm, 0.4);
             addSource(hitPalm.point, surf ? surf.normal : UP, t);
-            S.hudNote = 'wellspring'; S.lastCast = 'aqua'; drawHud();
-          } else { S.hudNote = `${ELEMENTS[S.selected].label.toLowerCase()} senses differently`; drawHud(); }
+            ST.hudNote = 'wellspring'; ST.lastCast = 'aqua'; drawHud();
+          } else { ST.hudNote = `${ELEMENTS[ST.selected].label.toLowerCase()} senses differently`; drawHud(); }
         }
       }
     }
@@ -309,7 +309,7 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     st.prevOtherFist = otherFist;
     if (near || t - st.clapBlock < 0.4) continue;
     // Shaping. Aqua: a pinch draws the carried water out into a stream. Morph: a bladed tendril. The others trace a line.
-    if (S.selected === 'aqua' || S.selected === 'morph') {
+    if (ST.selected === 'aqua' || ST.selected === 'morph') {
       if (stream.on && stream.endOwner === st) {     // this hand has the far end
         if (!st.pinch) stream.endOwner = null;
         st.ready = false; st.charge = 0;
@@ -318,31 +318,31 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
       if (stream.on && stream.owner === st) {
         if (st.pinch || st.curl < 1.45) {            // it stays out until the hand opens
           if (!stream.endOwner && other.valid && other.pinch && !other.wasPinch && stream.nodes.some(n => n.p.distanceTo(other.pinchPos) < 0.25)) stream.endOwner = other;
-          S.streamCtl = { root: st.pinch ? st.pinchPos : st.knuckle, dir: reachDir, vel: st.vel, eye: viewerPos, grip: isFist, squeeze: otherFist && !stream.endOwner, end: stream.endOwner ? stream.endOwner.pinchPos : null };
+          ST.streamCtl = { root: st.pinch ? st.pinchPos : st.knuckle, dir: reachDir, vel: st.vel, eye: viewerPos, grip: isFist, squeeze: otherFist && !stream.endOwner, end: stream.endOwner ? stream.endOwner.pinchPos : null };
         }
         st.ready = false; st.charge = 0; st.wasPinch = st.pinch;
         continue;
       }
       if (!stream.on && st.pinch && !st.wasPinch) {
         noteGesture('pinch');
-        S.streamCtl = { root: st.pinchPos, dir: reachDir, vel: st.vel, eye: viewerPos, grip: false, squeeze: false, end: null };
-        if (startStream(S.streamCtl, t, S.selected)) { stream.owner = st; st.ready = false; st.wasPinch = true; continue; }
+        ST.streamCtl = { root: st.pinchPos, dir: reachDir, vel: st.vel, eye: viewerPos, grip: false, squeeze: false, end: null };
+        if (startStream(ST.streamCtl, t, ST.selected)) { stream.owner = st; st.ready = false; st.wasPinch = true; continue; }
       }
     } else if (st.pinch) {
-      if (!S.drawing) drawBegin(S.selected, st.pinchPos, st);
-      else if (S.drawing.owner === st) drawAdd(st.pinchPos);
+      if (!ST.drawing) drawBegin(ST.selected, st.pinchPos, st);
+      else if (ST.drawing.owner === st) drawAdd(st.pinchPos);
       st.ready = false; st.charge = 0; st.wasPinch = true;
       continue;
-    } else if (S.drawing && S.drawing.owner === st) drawEnd(t);
+    } else if (ST.drawing && ST.drawing.owner === st) drawEnd(t);
     st.wasPinch = st.pinch;
-    if (S.selected === 'aero' && isOpen && st.speed > 0.4 && currents.length && bendCurrents(st.palm, st.vel, dt)) { st.ready = false; continue; }
-    if (GRABS[S.selected]) {
+    if (ST.selected === 'aero' && isOpen && st.speed > 0.4 && currents.length && bendCurrents(st.palm, st.vel, dt)) { st.ready = false; continue; }
+    if (GRABS[ST.selected]) {
       if (isOpen && st.speed < 0.9) {                // an open hand reaching: show what it would take
-        st.aim = findGrabTarget(holdKey(S.selected), viewerPos, reachDir, t);
+        st.aim = findGrabTarget(holdKey(ST.selected), viewerPos, reachDir, t);
         st.aimT = t;
-        showReticle(idx, st.aim, holdKey(S.selected), viewerPos);
+        showReticle(idx, st.aim, holdKey(ST.selected), viewerPos);
       } else if (isFist && st.aim && t - st.aimT < 0.35 && st.speed < 0.9 && reachNow >= CHARGE_REACH) {
-        beginHold(st, holdKey(S.selected), st.aim, viewerPos, t);
+        beginHold(st, holdKey(ST.selected), st.aim, viewerPos, t);
         st.hold.reach0 = reachNow || 1;
         st.aim = null; st.ready = false;
         continue;
@@ -350,16 +350,16 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
     }
     // Charging: a raised fist that stays closed builds the discipline's big throw; the next punch lets it go.
     // Pyro charges at any reach. The others charge with the fist drawn in toward you, so it cannot be mistaken for a grab.
-    if (isFist && st.palm.y > viewerPos.y - 0.5 && (!GRABS[S.selected] || reachNow < CHARGE_REACH)) st.charge = Math.min(st.charge + dt, CHARGE_MAX);
+    if (isFist && st.palm.y > viewerPos.y - 0.5 && (!GRABS[ST.selected] || reachNow < CHARGE_REACH)) st.charge = Math.min(st.charge + dt, CHARGE_MAX);
     else if (!isFist) st.charge = 0;
-    showCharge(idx, st.knuckle, st.charge, S.selected);
+    showCharge(idx, st.knuckle, st.charge, ST.selected);
 
     // Held senses: Aqua reads through a raised open palm, Pyro through a raised fist.
     const raised = st.palm.y > viewerPos.y - 0.5;
     if (raised && st.stillT > HOLD_TIME) {
-      if (S.selected === 'aqua' && isOpen && st.normal.dot(_fwd) > 0.5) held.aqua = { origin: viewerPos, dir: st.normal };
-      if (FIST_SENSE[S.selected] && isFist) held.pyro = { centre: viewerPos };
-      if (PALM_SENSE[S.selected] && isOpen && st.normal.dot(_fwd) > 0.5) held.lumen = { origin: viewerPos };
+      if (ST.selected === 'aqua' && isOpen && st.normal.dot(_fwd) > 0.5) held.aqua = { origin: viewerPos, dir: st.normal };
+      if (FIST_SENSE[ST.selected] && isFist) held.pyro = { centre: viewerPos };
+      if (PALM_SENSE[ST.selected] && isOpen && st.normal.dot(_fwd) > 0.5) held.lumen = { origin: viewerPos };
     }
 
     // Attacks.
@@ -380,12 +380,12 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
             const twin = isTwin(st, other) && other !== menuHand && !other.hold;
             if (twin) { other.ready = false; other.lastCast = t; }
             noteGesture('down punch');
-            cast(S.selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: under.point, normal: under.normal, t, st, power: twin ? 1.6 : 1 });
+            cast(ST.selected, 'slam', { hand: st.knuckle.clone(), dir: _fwd.clone(), eye: viewerPos.clone(), fwd: _fwd.clone(), ground: under.point, normal: under.normal, t, st, power: twin ? 1.6 : 1 });
             continue;
           }
         }
         if (gesture === 'punch' && st.charge > CHARGE_MIN) {
-          throwCharged(S.selected, c.hand, c.dir, c.eye, c.fwd, st.charge, t);
+          throwCharged(ST.selected, c.hand, c.dir, c.eye, c.fwd, st.charge, t);
           st.charge = 0;
           continue;
         }
@@ -395,7 +395,7 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
           c.power = 1.6;
           if (gesture !== 'lift' && gesture !== 'sweep') c.hand.lerp(gesture === 'punch' ? other.knuckle : gesture === 'point' ? other.indexTip : other.palm, 0.5);
         }
-        cast(S.selected, gesture, c);
+        cast(ST.selected, gesture, c);
       }
     }
   }
@@ -404,13 +404,13 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
   const lead = R.valid && R !== menuHand ? R : L.valid && L !== menuHand ? L : null;
   // Carried water floats in front of your chest, where either hand can reach it. (A charging fist still calls it over.)
   waterAnchor.copy(viewerPos).addScaledVector(_off.copy(_fwd).setY(0).normalize(), 0.42).setY(viewerPos.y - 0.38);
-  S.waterAnchorOn = S.selected === 'aqua';
+  ST.waterAnchorOn = ST.selected === 'aqua';
 
   readout.visible = options.read;
   if (options.read) {
     drawReadout(L, R, t);
     if (R.valid) readout.position.copy(R.wrist).add(_off.set(0, 0.11, 0));
-    else { _off.set(0.22, -0.2, -0.55).applyQuaternion(L.viewerQuat); readout.position.copy(viewerPos).add(_off); }
+    else { _off.set(0.22, -0.2, -0.55).applyQuaternion(LATE.viewerQuat); readout.position.copy(viewerPos).add(_off); }
     readout.lookAt(viewerPos);
   }
 
@@ -419,7 +419,7 @@ export function updateHands(frame, refSpace, t, dt, viewerPos) {
   if (L.valid) {
     hud.position.copy(L.wrist).add(_off.set(0, 0.09, 0));
   } else {
-    _off.set(0, -0.28, -0.55).applyQuaternion(L.viewerQuat);
+    _off.set(0, -0.28, -0.55).applyQuaternion(LATE.viewerQuat);
     hud.position.copy(viewerPos).add(_off);
   }
   hud.lookAt(viewerPos);
@@ -442,10 +442,10 @@ export function onSelectStart(event) {
   if (!controllerRay(event)) return;
   const t = now();
   if (aimAssist(_origin, _rayDir, 0.3, t)) {
-    cast(S.selected, 'punch', { hand: _origin.clone(), dir: _rayDir.clone(), eye: L.viewerPos.clone(), fwd: _rayDir.clone(), t });
+    cast(ST.selected, 'punch', { hand: _origin.clone(), dir: _rayDir.clone(), eye: LATE.viewerPos.clone(), fwd: _rayDir.clone(), t });
     return;
   }
-  if (S.selected === 'aero') { senseAero(_origin.clone(), t); return; }
+  if (ST.selected === 'aero') { senseAero(_origin.clone(), t); return; }
   raycaster.set(_origin, _rayDir);
   raycaster.far = Infinity;
   const hit = raycaster.intersectObjects(colliders(), false)[0];
@@ -453,8 +453,8 @@ export function onSelectStart(event) {
 }
 export function onSqueezeStart(event) {
   if (event.inputSource.hand) return;
-  selectElement(ELEMENT_ORDER[(ELEMENT_ORDER.indexOf(S.selected) + 1) % ELEMENT_ORDER.length]);
+  selectElement(ELEMENT_ORDER[(ELEMENT_ORDER.indexOf(ST.selected) + 1) % ELEMENT_ORDER.length]);
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { _fwd, handShape, handState });
+Object.assign(LATE, { _fwd, handShape, handState });

@@ -34,13 +34,13 @@
 
 
 
-import { forms } from './data.js?v=14';
-import { S, L } from './state.js?v=14';
+import { forms } from './data.js?v=15';
+import { ST, LATE } from './state.js?v=15';
 export const statusEl = document.getElementById('status');
 export const hintEl = document.getElementById('hint');
 export const enterBtn = document.getElementById('enter');
 export const uiEl = document.getElementById('ui');
 export const chipEls = Array.from(document.querySelectorAll('[data-el]'));
 export const moveEls = Array.from(document.querySelectorAll('[data-g]'));
-S.terraForm = 'rock';
-export const formOf = (key) => key === 'terra' ? S.terraForm : forms[key];
+ST.terraForm = 'rock';
+export const formOf = (key) => key === 'terra' ? ST.terraForm : forms[key];

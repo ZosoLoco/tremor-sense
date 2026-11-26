@@ -1,29 +1,29 @@
 import * as THREE from 'three';
-import { ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, PALM_SENSE, TOUCH_SENSE, GESTURES } from './data.js?v=14';
-import { ensureAudio } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { chipEls, moveEls } from './core.js?v=14';
-import { renderer, camera, UP, now } from './renderer.js?v=14';
-import { firePulse } from './pulse.js?v=14';
-import { previewGroup } from './room.js?v=14';
-import { collide } from './collision.js?v=14';
-import { aimAssist, flat } from './creatures.js?v=14';
-import { cast } from './flourish.js?v=14';
-import { addSource } from './water.js?v=14';
-import { findGrabTarget, beginHold, endHold, throwCharged } from './grip.js?v=14';
-import { resonate } from './seal.js?v=14';
-import { guard } from './guard.js?v=14';
-import { stream, startStream, drawBegin, drawEnd, _cp } from './shaping.js?v=14';
-import { rootSense, senseAero } from './senses.js?v=14';
-import { selectElement, flipSwitch } from './selection.js?v=14';
-import { drawHud } from './hud.js?v=14';
-import { raycaster } from './hands.js?v=14';
+import { ELEMENTS, ELEMENT_ORDER, GRABS, holdKey, PALM_SENSE, TOUCH_SENSE, GESTURES } from './data.js?v=15';
+import { ensureAudio } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { chipEls, moveEls } from './core.js?v=15';
+import { renderer, camera, UP, now } from './renderer.js?v=15';
+import { firePulse } from './pulse.js?v=15';
+import { previewGroup } from './room.js?v=15';
+import { collide } from './collision.js?v=15';
+import { aimAssist, flat } from './creatures.js?v=15';
+import { cast } from './flourish.js?v=15';
+import { addSource } from './water.js?v=15';
+import { findGrabTarget, beginHold, endHold, throwCharged } from './grip.js?v=15';
+import { resonate } from './seal.js?v=15';
+import { guard } from './guard.js?v=15';
+import { stream, startStream, drawBegin, drawEnd, _cp } from './shaping.js?v=15';
+import { rootSense, senseAero } from './senses.js?v=15';
+import { selectElement, flipSwitch } from './selection.js?v=15';
+import { drawHud } from './hud.js?v=15';
+import { raycaster } from './hands.js?v=15';
 
 // ---------- flat screen preview ----------
-S.previewGesture = 'sense';
-S.previewHold = null;      // { kind, until, origin, dir }
+ST.previewGesture = 'sense';
+ST.previewHold = null;      // { kind, until, origin, dir }
 export function selectGesture(g) {
-  S.previewGesture = g;
+  ST.previewGesture = g;
   if (squeezeBtn) squeezeBtn.style.display = g === 'grip' || g === 'draw' ? '' : 'none';
   for (const el of moveEls) el.classList.toggle('on', el.dataset.g === g);
 }
@@ -45,41 +45,41 @@ renderer.domElement.addEventListener('pointerdown', (ev) => {
   const dir = aimPoint.clone().sub(hand).normalize();
   const fwd = flat(aim);
 
-  if (S.previewGesture === 'seal') { resonate(S.selected, t); return; }
-  if (S.previewGesture === 'draw') {                 // press and drag: the pointer is the pinch
+  if (ST.previewGesture === 'seal') { resonate(ST.selected, t); return; }
+  if (ST.previewGesture === 'draw') {                 // press and drag: the pointer is the pinch
     previewAim.copy(aim);
     previewDraw.down = true;
-    if (S.selected === 'aqua' || S.selected === 'morph') {
+    if (ST.selected === 'aqua' || ST.selected === 'morph') {
       previewDraw.ctl = { root: previewPinch(new THREE.Vector3()), dir: aim.clone(), vel: new THREE.Vector3(), eye: eye.clone(), grip: false, squeeze: false, end: null };
-      S.streamCtl = previewDraw.ctl;
-      if (!startStream(S.streamCtl, t, S.selected)) { S.streamCtl = previewDraw.ctl = null; }
-    } else drawBegin(S.selected, previewPinch(new THREE.Vector3()));
+      ST.streamCtl = previewDraw.ctl;
+      if (!startStream(ST.streamCtl, t, ST.selected)) { ST.streamCtl = previewDraw.ctl = null; }
+    } else drawBegin(ST.selected, previewPinch(new THREE.Vector3()));
     return;
   }
-  if (S.previewGesture === 'charge') { previewAim.copy(aim); previewGrip.chargeFrom = t; return; }
-  if (S.previewGesture === 'grip') {
+  if (ST.previewGesture === 'charge') { previewAim.copy(aim); previewGrip.chargeFrom = t; return; }
+  if (ST.previewGesture === 'grip') {
     previewAim.copy(aim);
-    if (!GRABS[S.selected]) { previewGrip.chargeFrom = t; return; }
-    const tgt = findGrabTarget(holdKey(S.selected), eye, aim, t);
-    if (tgt) beginHold(previewGrip, holdKey(S.selected), tgt, eye, t);
+    if (!GRABS[ST.selected]) { previewGrip.chargeFrom = t; return; }
+    const tgt = findGrabTarget(holdKey(ST.selected), eye, aim, t);
+    if (tgt) beginHold(previewGrip, holdKey(ST.selected), tgt, eye, t);
     return;
   }
-  if (S.previewGesture === 'sense') {
-    if (TOUCH_SENSE[S.selected]) { if (hit) { firePulse(hit.point); if (S.selected === 'flora') rootSense(hit.point, t); } }
-    else if (S.selected === 'aero') senseAero(hand, t);
-    else if (S.selected === 'aqua') { S.previewHold = { kind: 'aqua', until: t + 2.2, origin: hand, dir }; if (hit) addSource(hit.point, hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP, t); }
-    else S.previewHold = { kind: PALM_SENSE[S.selected] ? 'lumen' : 'pyro', until: t + 2.2, origin: eye };
-    if (S.selected !== 'aero') { S.hudNote = ELEMENTS[S.selected].sense.toLowerCase(); drawHud(); }
+  if (ST.previewGesture === 'sense') {
+    if (TOUCH_SENSE[ST.selected]) { if (hit) { firePulse(hit.point); if (ST.selected === 'flora') rootSense(hit.point, t); } }
+    else if (ST.selected === 'aero') senseAero(hand, t);
+    else if (ST.selected === 'aqua') { ST.previewHold = { kind: 'aqua', until: t + 2.2, origin: hand, dir }; if (hit) addSource(hit.point, hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : UP, t); }
+    else ST.previewHold = { kind: PALM_SENSE[ST.selected] ? 'lumen' : 'pyro', until: t + 2.2, origin: eye };
+    if (ST.selected !== 'aero') { ST.hudNote = ELEMENTS[ST.selected].sense.toLowerCase(); drawHud(); }
     return;
   }
   const c = { hand, dir, eye, fwd, t, power: ev.shiftKey ? 1.6 : 1, st: previewHand };
-  if (S.previewGesture === 'lift' || S.previewGesture === 'sweep') c.dir = aimPoint.clone().sub(eye).normalize();
-  if (S.previewGesture === 'slam') {
+  if (ST.previewGesture === 'lift' || ST.previewGesture === 'sweep') c.dir = aimPoint.clone().sub(eye).normalize();
+  if (ST.previewGesture === 'slam') {
     c.ground = eye.clone().addScaledVector(fwd, 1.1).setY(0);
     c.normal = UP.clone();
     c.dir = aimPoint.clone().sub(eye).normalize();
   }
-  cast(S.selected, S.previewGesture, c);
+  cast(ST.selected, ST.previewGesture, c);
 });
 // Preview grip: press and drag to hold, release to throw. C (or the Squeeze button) is the other fist.
 export const previewGrip = { hold: null, chargeFrom: -1, squeeze: false, prevSqueeze: false };
@@ -88,8 +88,8 @@ export const previewDraw = { down: false, ctl: null };
 export const previewHand = { valid: true, palm: new THREE.Vector3(), across: new THREE.Vector3(1, 0, 0) };
 // Where the pinch is in the preview: on the surface under the pointer for fire and stone, out in the air for wind and water.
 export function previewPinch(out) {
-  if (S.selected === 'aqua' || S.selected === 'morph') return out.copy(camera.position).addScaledVector(previewAim, 0.9);
-  if (S.selected === 'aero') return out.copy(camera.position).addScaledVector(previewAim, 2.2);
+  if (ST.selected === 'aqua' || ST.selected === 'morph') return out.copy(camera.position).addScaledVector(previewAim, 0.9);
+  if (ST.selected === 'aero') return out.copy(camera.position).addScaledVector(previewAim, 2.2);
   const far = collide(camera.position, _cp.copy(camera.position).addScaledVector(previewAim, 8));
   return far ? out.copy(far.point).addScaledVector(far.normal, 0.2) : out.copy(camera.position).addScaledVector(previewAim, 3);
 }
@@ -104,7 +104,7 @@ const releasePreview = () => {
   if (renderer.xr.isPresenting) return;
   if (previewDraw.down) {
     previewDraw.down = false;
-    if (previewDraw.ctl) { previewDraw.ctl = null; S.streamCtl = null; stream.seenT = -9; }
+    if (previewDraw.ctl) { previewDraw.ctl = null; ST.streamCtl = null; stream.seenT = -9; }
     else drawEnd(now());
   }
   if (previewGrip.hold) endHold(previewGrip);
@@ -114,7 +114,7 @@ const releasePreview = () => {
     if (charge > 0.3) {
       const hand = camera.position.clone().add(new THREE.Vector3(0.25, -0.3, -0.35).applyQuaternion(camera.quaternion));
       const tgt = camera.position.clone().addScaledVector(previewAim, 4);
-      throwCharged(S.selected, hand, tgt.sub(hand).normalize(), camera.position.clone(), flat(previewAim), charge, t);
+      throwCharged(ST.selected, hand, tgt.sub(hand).normalize(), camera.position.clone(), flat(previewAim), charge, t);
     }
   }
 };
@@ -132,7 +132,7 @@ for (const el of optionEls) el.addEventListener('click', () => { ensureAudio(); 
 for (const el of chipEls) el.addEventListener('click', () => { ensureAudio(); selectElement(el.dataset.el); });
 for (const el of moveEls) el.addEventListener('click', () => { ensureAudio(); selectGesture(el.dataset.g); });
 window.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Tab') { ev.preventDefault(); selectElement(S.prevSelected, true); return; }
+  if (ev.key === 'Tab') { ev.preventDefault(); selectElement(ST.prevSelected, true); return; }
   const i = '1234567890-'.indexOf(ev.key);
   if (i >= 0) selectElement(ELEMENT_ORDER[i]);
   const g = 'qwertyuiop['.indexOf(ev.key.toLowerCase());
@@ -140,5 +140,5 @@ window.addEventListener('keydown', (ev) => {
 });
 
 // Reached from modules that load before this one.
-Object.assign(L, { optionEls });
-L.previewHand = previewHand;
+Object.assign(LATE, { optionEls });
+LATE.previewHand = previewHand;

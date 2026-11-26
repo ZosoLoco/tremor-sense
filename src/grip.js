@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { ACID, ELEMENTS } from './data.js?v=14';
-import { moveSound } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene, UP, ZERO, now } from './renderer.js?v=14';
-import { FIRE_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=14';
-import { collide, lineOfSight } from './collision.js?v=14';
-import { echoes, glowMat, isLive, hit } from './echoes.js?v=14';
-import { ENERGY, energyMat, stoneMat, craggy, puff } from './visuals.js?v=14';
-import { impact } from './effects.js?v=14';
-import { cast } from './flourish.js?v=14';
-import { HEAT_TIME, GRIP, objects, spawnObject, spawnCloud, turn, crushObject } from './objects.js?v=14';
-import { makeWrap, updateWrap, dropHold } from './water.js?v=14';
+import { ACID, ELEMENTS } from './data.js?v=15';
+import { moveSound } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene, UP, ZERO, now } from './renderer.js?v=15';
+import { FIRE_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=15';
+import { collide, lineOfSight } from './collision.js?v=15';
+import { echoes, glowMat, isLive, hit } from './echoes.js?v=15';
+import { ENERGY, energyMat, stoneMat, craggy, puff } from './visuals.js?v=15';
+import { impact } from './effects.js?v=15';
+import { cast } from './flourish.js?v=15';
+import { HEAT_TIME, GRIP, objects, spawnObject, spawnCloud, turn, crushObject } from './objects.js?v=15';
+import { makeWrap, updateWrap, dropHold } from './water.js?v=15';
 
 // ---------- grip: holding on to something ----------
 // Aero holds objects (and can crush them with the other fist). Aqua holds echoes, the water in them.
@@ -52,9 +52,9 @@ export function beginHold(g, key, target, eye, t) {
   let type = target.type, obj = target.obj || null;
   if (type === 'ground') {
     const out = target.pos.clone().addScaledVector(target.normal || UP, 0.24);
-    if (S.terraForm === 'sand') obj = spawnCloud('sand', out.addScaledVector(target.normal || UP, 0.4), t, 14);    // a cloud of it, to carry
-    else obj = spawnObject(S.terraForm === 'metal' ? 'anvil' : 'stone', out);
-    if (S.terraForm === 'lava') obj.heat = t + HEAT_TIME;
+    if (ST.terraForm === 'sand') obj = spawnCloud('sand', out.addScaledVector(target.normal || UP, 0.4), t, 14);    // a cloud of it, to carry
+    else obj = spawnObject(ST.terraForm === 'metal' ? 'anvil' : 'stone', out);
+    if (ST.terraForm === 'lava') obj.heat = t + HEAT_TIME;
     puff('terra', target.pos, 40, 2.6, { dir: target.normal || UP, spread: 0.9, jitter: 0.25 });
     firePulse(target.pos);
     type = 'object';
@@ -64,9 +64,9 @@ export function beginHold(g, key, target, eye, t) {
   g.hold = { key, type, obj, e: target.e || null, dist: (obj ? obj.pos : target.pos).distanceTo(eye),
     pv: new THREE.Vector3(), lastSlam: -9, lastWring: -9, reach0: 1,
     wrap: key === 'aero' || key === 'aqua' ? makeWrap(key) : null };
-  S.lastCast = key; moveSound(key, 'grip');
-  L.noteGesture(`grip > ${GRIP[key]}`);
-  S.hudNote = GRIP[key].toLowerCase(); L.drawHud();
+  ST.lastCast = key; moveSound(key, 'grip');
+  LATE.noteGesture(`grip > ${GRIP[key]}`);
+  ST.hudNote = GRIP[key].toLowerCase(); LATE.drawHud();
 }
 const _want = new THREE.Vector3(), _hstep = new THREE.Vector3(), _hnext = new THREE.Vector3(), _thread = new THREE.Vector3();
 // eye + dir is where the hand points from; reach is how far the arm is out compared with when it grabbed.
@@ -89,7 +89,7 @@ export function updateHold(g, eye, dir, reach, input, t, dt) {
     o.rest = false;
     o.vel.copy(_want).sub(o.pos).multiplyScalar((h.key === 'terra' ? 7 : 10) / Math.sqrt(o.def.mass)).clampLength(0, 12);   // heavy things lag behind the hand
     if (h.key === 'aero') {
-      if (input.squeezeEdge) { crushObject(o, t); dropHold(g); S.hudNote = 'crush'; L.drawHud(); }
+      if (input.squeezeEdge) { crushObject(o, t); dropHold(g); ST.hudNote = 'crush'; LATE.drawHud(); }
     }
     return;
   }
@@ -104,7 +104,7 @@ export function updateHold(g, eye, dir, reach, input, t, dt) {
     if (speed > 2.5 && t - h.lastSlam > 0.5) {
       h.lastSlam = t;
       impact(wall.point, wall.normal, 'aqua', t, 0.35);
-      S.hudNote = 'slam'; hit(e, 'aqua', t, ZERO, { damage: 1 });
+      ST.hudNote = 'slam'; hit(e, 'aqua', t, ZERO, { damage: 1 });
     }
   } else e.home.add(_hstep);
   e.restY = e.home.y; e.airborne = false; e.vel.set(0, 0, 0);
@@ -112,7 +112,7 @@ export function updateHold(g, eye, dir, reach, input, t, dt) {
     for (const o2 of echoes) {
       if (o2 === e || !isLive(o2, t) || o2.group.position.distanceTo(e.home) > 0.24) continue;
       h.lastSlam = t;
-      S.hudNote = 'slam';
+      ST.hudNote = 'slam';
       hit(o2, 'aqua', t, h.pv.clone().normalize(), { damage: 1 });
       hit(e, 'aqua', t, ZERO, { damage: 1 });
       break;
@@ -121,7 +121,7 @@ export function updateHold(g, eye, dir, reach, input, t, dt) {
   if (!e.down && input.squeeze && t - h.lastWring > 0.6) {  // the other fist closes: wring it out
     h.lastWring = t;
     hit(e, 'aqua', t, ZERO, { damage: 1 });
-    S.hudNote = 'wring'; L.drawHud();
+    ST.hudNote = 'wring'; LATE.drawHud();
   }
   if (e.down) dropHold(g);
 }
@@ -202,7 +202,7 @@ const extraOrbs = {};
 for (const k of ['lumen', 'gravis', 'flora', 'astra', 'morph', 'umbra', 'necro']) extraOrbs[k] = orbsOf(k);
 export const hideOrbs = (i) => { chargeOrbs[i].visible = rockOrbs[i].visible = windOrbs[i].visible = false; for (const k in extraOrbs) extraOrbs[k][i].visible = false; };
 export const CHARGE_MIN = 0.6, CHARGE_MAX = 1.6, CHARGE_REACH = 0.45;   // a fist closer to you than this charges; further out, it grabs
-S.waterBoost = null;                            // where a charging Aqua fist is, while it is charging
+ST.waterBoost = null;                            // where a charging Aqua fist is, while it is charging
 export function showCharge(i, pos, charge, key = 'pyro') {
   const k = Math.min(charge / CHARGE_MAX, 1);
   rockOrbs[i].visible = key === 'terra' && charge > 0.2;
@@ -215,7 +215,7 @@ export function showCharge(i, pos, charge, key = 'pyro') {
     windOrbs[i].position.copy(pos); windOrbs[i].scale.setScalar(0.03 + 0.08 * k);
     windOrbs[i].children.forEach((b, n) => { b.rotation.z += (n ? -0.5 : 0.4); });
   }
-  if (key === 'aqua' && charge > 0.1) S.waterBoost = pos;
+  if (key === 'aqua' && charge > 0.1) ST.waterBoost = pos;
   chargeOrbs[i].visible = false; for (const k in extraOrbs) extraOrbs[k][i].visible = false;
   const g = extraOrbs[key] ? extraOrbs[key][i] : chargeOrbs[i];
   g.visible = (key === 'pyro' || !!extraOrbs[key]) && charge > 0.2;

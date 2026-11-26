@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { KINDS, HOLD_REVEAL, TIDE_SENSE, DRAFT_SENSE, ELEMENTS, FIST_SENSE } from './data.js?v=14';
-import { play, SFX, castSound } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene } from './renderer.js?v=14';
-import { pulseUniforms } from './pulse.js?v=14';
-import { collide, nearestRoomSurface, lineOfSight } from './collision.js?v=14';
-import { echoes, glowMat, roomBounds, reveal } from './echoes.js?v=14';
-import { AI, HOSTILE } from './creatures.js?v=14';
-import { particles, PCOL } from './visuals.js?v=14';
-import { addEffect } from './effects.js?v=14';
-import { MAX_OBJECTS, objects } from './objects.js?v=14';
-import { _cp } from './shaping.js?v=14';
+import { KINDS, HOLD_REVEAL, TIDE_SENSE, DRAFT_SENSE, ELEMENTS, FIST_SENSE } from './data.js?v=15';
+import { play, SFX, castSound } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene } from './renderer.js?v=15';
+import { pulseUniforms } from './pulse.js?v=15';
+import { collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
+import { echoes, glowMat, roomBounds, reveal } from './echoes.js?v=15';
+import { AI, HOSTILE } from './creatures.js?v=15';
+import { particles, PCOL } from './visuals.js?v=15';
+import { addEffect } from './effects.js?v=15';
+import { MAX_OBJECTS, objects } from './objects.js?v=15';
+import { _cp } from './shaping.js?v=15';
 
 // ---------- senses ----------
 // Each one fills the whole room and tells you something different.
@@ -18,7 +18,7 @@ import { _cp } from './shaping.js?v=14';
 //   Draft  (Aero):  the room's air, for several seconds. Shows whatever is moving, and the trail it leaves.
 //   Chi    (Pyro):  heat and life, through walls, for as long as you hold it. Shows health, and which objects are hot.
 //   Tide   (Aqua):  water across the whole floor, for as long as you hold it. Shows where everything stands, by its ripples.
-S.draftUntil = -1;
+ST.draftUntil = -1;
 // Flora feels through what grows along every surface: anything close to a wall, the floor or furniture shows, and holds still a moment.
 export function rootSense(point, t) {
   for (const e of echoes) {
@@ -29,9 +29,9 @@ export function rootSense(point, t) {
 }
 export function senseAero(centre, t) {
   play(SFX.aero.sense);
-  S.hudNote = ELEMENTS.aero.sense.toLowerCase(); S.lastCast = 'aero'; L.drawHud();
+  ST.hudNote = ELEMENTS.aero.sense.toLowerCase(); ST.lastCast = 'aero'; LATE.drawHud();
   castSound.aero();
-  S.draftUntil = t + DRAFT_SENSE.lasts;
+  ST.draftUntil = t + DRAFT_SENSE.lasts;
   const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 3), glowMat(ELEMENTS.aero.color, 0.35));
   shell.material.wireframe = true;
   shell.position.copy(centre);
@@ -44,8 +44,8 @@ export function senseAero(centre, t) {
 }
 const _wind = new THREE.Vector3(), _wp = new THREE.Vector3();
 function updateDraft(t) {
-  if (t > S.draftUntil) return;
-  const fade = Math.min((S.draftUntil - t) / 1.5, 1);
+  if (t > ST.draftUntil) return;
+  const fade = Math.min((ST.draftUntil - t) / 1.5, 1);
   const box = roomBounds();
   const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
   for (let i = 0; i < Math.round(9 * fade); i++) {  // the room's air made visible: a slow turning current
@@ -115,7 +115,7 @@ const _amb = new THREE.Color();
 const SENSE_TINT = { necro: [0.02, 0.1, 0.07], pyro: [0.16, 0.045, 0.01], gravis: [0.06, 0.03, 0.15], morph: [0.16, 0.02, 0.04], umbra: [0.05, 0.0, 0.1], lumen: [0.15, 0.14, 0.1], astra: [0.05, 0.07, 0.16] };
 let senseWas = null;
 export function updateHeldSenses(t, heldDt = 0.016) {
-  const sensing = held.pyro || held.aqua || held.lumen ? S.selected : null;      // the note a held sense opens on
+  const sensing = held.pyro || held.aqua || held.lumen ? ST.selected : null;      // the note a held sense opens on
   if (sensing && sensing !== senseWas) play(SFX[sensing].sense);
   senseWas = sensing;
   // Tide
@@ -148,28 +148,28 @@ export function updateHeldSenses(t, heldDt = 0.016) {
   const p = held.pyro;
   _amb.setRGB(0, 0, 0);
   if (p) {
-    const tint = SENSE_TINT[S.selected] || SENSE_TINT.pyro;
+    const tint = SENSE_TINT[ST.selected] || SENSE_TINT.pyro;
     _amb.setRGB(tint[0], tint[1], tint[2]);
     for (const e of echoes) {
       if (e.down) continue;
-      if (S.selected === 'pyro' && (e.frozenUntil > t || (AI.kinds && KINDS[e.kind] && KINDS[e.kind].cold))) continue;          // ice gives off no heat: Chi cannot find what is frozen
-      reveal(e, t, HOLD_REVEAL, ELEMENTS[FIST_SENSE[S.selected] ? S.selected : 'pyro'].color);
-      if (S.selected === 'umbra') e.blindUntil = Math.max(e.blindUntil, t + 0.4);   // while you hold the dark, nothing can see you
+      if (ST.selected === 'pyro' && (e.frozenUntil > t || (AI.kinds && KINDS[e.kind] && KINDS[e.kind].cold))) continue;          // ice gives off no heat: Chi cannot find what is frozen
+      reveal(e, t, HOLD_REVEAL, ELEMENTS[FIST_SENSE[ST.selected] ? ST.selected : 'pyro'].color);
+      if (ST.selected === 'umbra') e.blindUntil = Math.max(e.blindUntil, t + 0.4);   // while you hold the dark, nothing can see you
     }
   }
   // Glint: light shows everything it can reach, in full, and nothing it cannot.
   if (held.lumen) {
-    const tint = SENSE_TINT[S.selected] || SENSE_TINT.lumen;
+    const tint = SENSE_TINT[ST.selected] || SENSE_TINT.lumen;
     _amb.setRGB(tint[0], tint[1], tint[2]);
-    if (S.selected === 'astra') {                      // from straight overhead: whatever has open sky above it
+    if (ST.selected === 'astra') {                      // from straight overhead: whatever has open sky above it
       for (const e of echoes) if (!e.down && !collide(e.group.position, _cp.copy(e.group.position).setY(e.group.position.y + 1.2))) reveal(e, t, HOLD_REVEAL * 2, ELEMENTS.astra.color);
     } else for (const e of echoes) if (!e.down && lineOfSight(held.lumen.origin, e.group.position)) { reveal(e, t, HOLD_REVEAL * 2, ELEMENTS.lumen.color); e.exposedUntil = Math.max(e.exposedUntil, t + 2); }
   }
   pulseUniforms.uAmbient.value.lerp(_amb, Math.min(heldDt * 9, 1));   // by the clock, so it fades the same at any frame rate
   let g = 0;
-  if (p && (S.selected === 'pyro' || S.selected === 'gravis')) {
+  if (p && (ST.selected === 'pyro' || ST.selected === 'gravis')) {
     for (const o of objects) {
-      if (o.dead || g >= chiGhosts.length || (S.selected === 'pyro' && o.def.ice)) continue;
+      if (o.dead || g >= chiGhosts.length || (ST.selected === 'pyro' && o.def.ice)) continue;
       const hot = o.burnUntil > 0 || o.fuse > 0 || o.heat > t || o.def.explodes || o.kind === 'steam';
       const ghost = chiGhosts[g++];
       ghost.visible = true;
@@ -181,8 +181,8 @@ export function updateHeldSenses(t, heldDt = 0.016) {
   }
   for (; g < chiGhosts.length; g++) chiGhosts[g].visible = false;
   updateDraft(t);
-  if ((a || p) && S.hudNote !== ELEMENTS[S.selected].sense.toLowerCase()) {
-    S.hudNote = ELEMENTS[S.selected].sense.toLowerCase(); S.lastCast = S.selected; L.drawHud();
+  if ((a || p) && ST.hudNote !== ELEMENTS[ST.selected].sense.toLowerCase()) {
+    ST.hudNote = ELEMENTS[ST.selected].sense.toLowerCase(); ST.lastCast = ST.selected; LATE.drawHud();
   }
   held.aqua = held.pyro = held.lumen = null;
 }

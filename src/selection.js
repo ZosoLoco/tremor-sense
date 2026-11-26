@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { ELEMENTS, ELEMENT_ORDER, FORMS, forms, MOVES, SENSE_HOW } from './data.js?v=14';
-import { tick } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { chipEls, moveEls, formOf } from './core.js?v=14';
-import { scene, now } from './renderer.js?v=14';
-import { scatterEchoes } from './echoes.js?v=14';
-import { AI } from './creatures.js?v=14';
-import { SEALS } from './seal.js?v=14';
-import { DRAWN } from './shaping.js?v=14';
+import { ELEMENTS, ELEMENT_ORDER, FORMS, forms, MOVES, SENSE_HOW } from './data.js?v=15';
+import { tick } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { chipEls, moveEls, formOf } from './core.js?v=15';
+import { scene, now } from './renderer.js?v=15';
+import { scatterEchoes } from './echoes.js?v=15';
+import { AI } from './creatures.js?v=15';
+import { SEALS } from './seal.js?v=15';
+import { DRAWN } from './shaping.js?v=15';
 
 // ---------- discipline selection ----------
 export function setForm(key, form) {
-  if (key === 'terra') S.terraForm = form; else forms[key] = form;
+  if (key === 'terra') ST.terraForm = form; else forms[key] = form;
   const name = ELEMENTS[key].label[0] + ELEMENTS[key].label.slice(1).toLowerCase();
   for (const el of chipEls) if (el.dataset.el === key) el.textContent = form === FORMS[key][0] ? name : `${name} · ${form}`;
 }
@@ -19,24 +19,24 @@ export function cycleForm(key = 'terra') {
   const list = FORMS[key];
   setForm(key, list[(list.indexOf(formOf(key)) + 1) % list.length]);
   tick();
-  S.hudNote = `${ELEMENTS[key].label.toLowerCase()} as ${formOf(key)}`; S.lastCast = key;
-  L.drawHud();
+  ST.hudNote = `${ELEMENTS[key].label.toLowerCase()} as ${formOf(key)}`; ST.lastCast = key;
+  LATE.drawHud();
 }
-S.prevSelected = 'pyro';                         // the one before this one: a middle-finger pinch goes back to it
+ST.prevSelected = 'pyro';                         // the one before this one: a middle-finger pinch goes back to it
 export function selectElement(key, quiet) {
-  if (S.selected === key && !quiet) { cycleForm(key); return; }
-  if (S.selected === key && quiet) return;
-  S.prevSelected = S.selected;
-  S.selected = key;
-  S.lastCast = key;
+  if (ST.selected === key && !quiet) { cycleForm(key); return; }
+  if (ST.selected === key && quiet) return;
+  ST.prevSelected = ST.selected;
+  ST.selected = key;
+  ST.lastCast = key;
   for (const el of chipEls) el.classList.toggle('on', el.dataset.el === key);
   for (const el of moveEls) {
     const g = el.dataset.g;
     el.textContent = g === 'sense' ? ELEMENTS[key].sense : g === 'draw' ? DRAWN[key] : g === 'seal' ? SEALS[key].name : MOVES[key][g].name;
     el.style.setProperty('--c', `#${ELEMENTS[key].color.getHexString()}`);
   }
-  if (!quiet) { tick(); S.hudNote = `${ELEMENTS[key].label.toLowerCase()} · sense: ${SENSE_HOW[key]}`; }
-  L.drawHud();
+  if (!quiet) { tick(); ST.hudNote = `${ELEMENTS[key].label.toLowerCase()} · sense: ${SENSE_HOW[key]}`; }
+  LATE.drawHud();
 }
 
 // Palm menu: four orbs that float over an open palm turned toward your face.
@@ -101,7 +101,7 @@ export const switchMeshes = SWITCHES.map((label, i) => {
 });
 function drawSwitch(mesh) {
   const { canvas, tex, label, i } = mesh.userData;
-  const on = i === 0 ? options.calm : i === 1 ? options.read : i === 3 ? S.occlusion : false;
+  const on = i === 0 ? options.calm : i === 1 ? options.read : i === 3 ? ST.occlusion : false;
   const c = canvas.getContext('2d');
   c.clearRect(0, 0, 160, 80);
   c.fillStyle = on ? '#b6ff3c' : 'rgba(5,7,5,0.85)';
@@ -116,13 +116,13 @@ function drawSwitch(mesh) {
 switchMeshes.forEach(drawSwitch);
 export function flipSwitch(i) {
   tick();
-  if (i === 0) { options.calm = !options.calm; AI.attacks = !options.calm; S.hudNote = options.calm ? 'calm: no attacks' : 'attacks on'; }
-  else if (i === 1) { options.read = !options.read; S.hudNote = options.read ? 'hand readout on' : 'hand readout off'; }
-  else if (i === 3) { S.occlusion = !S.occlusion; S.hudNote = S.occlusion ? 'room hides what is behind it' : 'occlusion off'; }
-  else { S.wave = 1; scatterEchoes(); }
+  if (i === 0) { options.calm = !options.calm; AI.attacks = !options.calm; ST.hudNote = options.calm ? 'calm: no attacks' : 'attacks on'; }
+  else if (i === 1) { options.read = !options.read; ST.hudNote = options.read ? 'hand readout on' : 'hand readout off'; }
+  else if (i === 3) { ST.occlusion = !ST.occlusion; ST.hudNote = ST.occlusion ? 'room hides what is behind it' : 'occlusion off'; }
+  else { ST.wave = 1; scatterEchoes(); }
   switchMeshes.forEach(drawSwitch);
-  for (const el of L.optionEls) el.classList.toggle('on', el.dataset.opt === 'calm' && options.calm);
-  L.drawHud();
+  for (const el of LATE.optionEls) el.classList.toggle('on', el.dataset.opt === 'calm' && options.calm);
+  LATE.drawHud();
 }
 // The readout: a small panel over the right wrist.
 const readCanvas = document.createElement('canvas');
@@ -145,7 +145,7 @@ export function drawReadout(L, R, t) {
   c.font = '34px ui-monospace, Menlo, Consolas, monospace'; c.textBaseline = 'middle';
   const line = (tag, st, y) => {
     c.fillStyle = st.valid ? '#cfd6d2' : '#6f7a74';
-    c.fillText(st.valid ? `${tag} ${L.handShape(st).padEnd(5)} curl ${st.curl.toFixed(2)}  ${st.speed.toFixed(1)} m/s` : `${tag} not tracked`, 24, y);
+    c.fillText(st.valid ? `${tag} ${LATE.handShape(st).padEnd(5)} curl ${st.curl.toFixed(2)}  ${st.speed.toFixed(1)} m/s` : `${tag} not tracked`, 24, y);
   };
   line('L', L, 46); line('R', R, 100);
   c.fillStyle = '#b6ff3c';
@@ -155,4 +155,4 @@ export function drawReadout(L, R, t) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { noteGesture });
+Object.assign(LATE, { noteGesture });

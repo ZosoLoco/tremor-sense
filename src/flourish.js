@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { KINDS, ELEMENTS, FORMS, forms, MOVES } from './data.js?v=14';
-import { play, SFX, FAMILIAR_NOTE, moveSound, tone, thump } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { UP, ZERO } from './renderer.js?v=14';
-import { collide, lineOfSight } from './collision.js?v=14';
-import { echoes, glowMat, hit } from './echoes.js?v=14';
-import { aimAssist, flat } from './creatures.js?v=14';
-import { energyMat, puff } from './visuals.js?v=14';
-import { addEffect, castBolt, castCone, castColumn, castRing, castWall, castFault, zap, castBeam, castVoid, castLance, raiseThrall, castLegion } from './effects.js?v=14';
+import { KINDS, ELEMENTS, FORMS, forms, MOVES } from './data.js?v=15';
+import { play, SFX, FAMILIAR_NOTE, moveSound, tone, thump } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { UP, ZERO } from './renderer.js?v=15';
+import { collide, lineOfSight } from './collision.js?v=15';
+import { echoes, glowMat, hit } from './echoes.js?v=15';
+import { aimAssist, flat } from './creatures.js?v=15';
+import { energyMat, puff } from './visuals.js?v=15';
+import { addEffect, castBolt, castCone, castColumn, castRing, castWall, castFault, zap, castBeam, castVoid, castLance, raiseThrall, castLegion } from './effects.js?v=15';
 
 // ---------- what each discipline's blast and shockwave are actually made of ----------
 // Things that come up, stand a moment and go: roots, claws, spikes, shafts of light.
@@ -108,23 +108,23 @@ function castZone(key, m, c) {
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 6, 60), glowMat(ELEMENTS[key].color.clone(), 0.6));
   ball.position.copy(centre); rim.position.copy(centre);
   play(SFX.zone);
-  const until = t + m.seconds, last = new Map(), epoch = S.shapeEpoch;
+  const until = t + m.seconds, last = new Map(), epoch = ST.shapeEpoch;
   addEffect([ball, rim], (n) => {
-    if (epoch !== S.shapeEpoch) return false;
+    if (epoch !== ST.shapeEpoch) return false;
     const k = Math.min((n - t) / 0.3, 1) * Math.min((until - n) / 0.5, 1);
     ball.scale.setScalar(Math.max(m.radius * k, 0.01)); rim.scale.setScalar(Math.max(m.radius * k, 0.01));
-    rim.lookAt(L.viewerPos);
-    if (Math.random() < 0.5) puff(key, L._np.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(m.radius * 1.6).add(centre), 1, 0.3, {});
+    rim.lookAt(LATE.viewerPos);
+    if (Math.random() < 0.5) puff(key, LATE._np.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(m.radius * 1.6).add(centre), 1, 0.3, {});
     for (const e of echoes) {
       if (e.down || e.group.position.distanceTo(centre) > m.radius) continue;
       e.blindUntil = Math.max(e.blindUntil, n + 0.5);
       if (n - (last.get(e) || -9) > 1.1) { last.set(e, n); hit(e, key, n, ZERO, { ...m, damage: 1, kind: 'void' }); }
     }
-    for (const o of L.objects) if (!o.dead && o.hostile && o.pos.distanceTo(centre) < m.radius) { o.dead = true; puff(key, o.pos, 8, 1, {}); }   // what is thrown into the dark does not come out
+    for (const o of LATE.objects) if (!o.dead && o.hostile && o.pos.distanceTo(centre) < m.radius) { o.dead = true; puff(key, o.pos, 8, 1, {}); }   // what is thrown into the dark does not come out
     return n < until;
   });
 }
-const KIND = { zone: castZone, legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: (...a) => L.castWhip(...a) };
+const KIND = { zone: castZone, legion: castLegion, lance: castLance, bolt: castBolt, cone: castCone, column: castColumn, ring: castRing, wall: castWall, fault: castFault, beam: castBeam, void: castVoid, whip: (...a) => LATE.castWhip(...a) };
 
 // Both hands together: the same move, bigger and one point harder.
 function empowered(key, m, power) {
@@ -135,9 +135,9 @@ function empowered(key, m, power) {
   return out;
 }
 
-S.lastCast = null;
-S.selected = 'terra';
-S.hudNote = 'open palm toward you: pick';
+ST.lastCast = null;
+ST.selected = 'terra';
+ST.hudNote = 'open palm toward you: pick';
 
 // c: { hand, dir, eye, fwd, ground, t, power }. ground is only needed for slam; power above 1 is a two-handed cast.
 // What a creature looks like beyond its core: legs, wings, horns, crystals. Built when its kind is decided.
@@ -180,8 +180,8 @@ export function dressEcho(e) {
   e.group.add(g);
 }
 // Armour: for a few seconds, what is thrown at you breaks on you.
-S.armourUntil = -1;
-export function armour(t, seconds) { S.armourUntil = Math.max(S.armourUntil, t + seconds); play(SFX.guard); S.hudNote = 'armoured'; }
+ST.armourUntil = -1;
+export function armour(t, seconds) { ST.armourUntil = Math.max(ST.armourUntil, t + seconds); play(SFX.guard); ST.hudNote = 'armoured'; }
 // Anything standing that you made, you can move: an open-palm shove at your own wall slides it where you push.
 // It stays a wall. It hits what it passes through. (A punch still breaks it loose, the way it always did.)
 export function shoveBarrier(key, c) {
@@ -199,22 +199,22 @@ export function shoveBarrier(key, c) {
     for (const e of echoes) if (!e.down && !struck.has(e) && Math.hypot(e.group.position.x - b.like.position.x, e.group.position.z - b.like.position.z) < 0.8) { struck.add(e); hit(e, key, n, d, { damage: 1, kind: 'wall' }); }
     return k < 1;
   });
-  S.hudNote = 'moved it'; S.lastCast = key; L.drawHud();
+  ST.hudNote = 'moved it'; ST.lastCast = key; LATE.drawHud();
   return true;
 }
 export function cast(key, gesture, c) {
   let m = MOVES[key][gesture];
   if (!m) return;
   if (gesture === 'shove' && c.hand && !c.quiet && shoveBarrier(key, c)) return;
-  S.barrierKey = key;
+  ST.barrierKey = key;
   if (m.kind === 'ring' && m.summon) raiseThrall((c.ground || c.hand).clone().setY((c.ground || c.hand).y + 0.5), c.t);
-  if (c.st && key === 'lumen' && gesture === 'sweep') L.summonBlade(c.st, c.t);
-  if (!c.quiet) L.noteGesture(`${gesture} > ${m.name}`);
+  if (c.st && key === 'lumen' && gesture === 'sweep') LATE.summonBlade(c.st, c.t);
+  if (!c.quiet) LATE.noteGesture(`${gesture} > ${m.name}`);
   if (m.kind === 'grip') return;                    // holds are driven by beginHold / updateHold, not cast here
-  if (key === 'terra' && S.terraForm !== 'rock') {      // the same move, made of something else
-    m = { ...m, form: S.terraForm };
-    if (S.terraForm === 'sand') { m.damage = 1; if (m.kind === 'bolt') m.pierce = true; }
-    if (S.terraForm === 'metal' && m.kind === 'bolt') m.bounces = (m.bounces || 0) + 2;
+  if (key === 'terra' && ST.terraForm !== 'rock') {      // the same move, made of something else
+    m = { ...m, form: ST.terraForm };
+    if (ST.terraForm === 'sand') { m.damage = 1; if (m.kind === 'bolt') m.pierce = true; }
+    if (ST.terraForm === 'metal' && m.kind === 'bolt') m.bounces = (m.bounces || 0) + 2;
   }
   const form = key === 'terra' ? null : forms[key];
   if (form && form !== FORMS[key][0]) {
@@ -264,15 +264,15 @@ export function cast(key, gesture, c) {
     m = { ...m, sky: false };
   }
   if (key === 'aqua' && gesture === 'charge') {      // everything you gathered goes in one throw
-    m = { ...m, damage: 1 + Math.floor(L.water.amount / 2), splash: 1 + L.water.amount * 0.25 };
-    c.scale = 1 + L.water.amount * 0.3;
-    if (L.water.amount > 0.3) c.hand = L.water.pos.clone();
-    L.water.amount = 0;
+    m = { ...m, damage: 1 + Math.floor(LATE.water.amount / 2), splash: 1 + LATE.water.amount * 0.25 };
+    c.scale = 1 + LATE.water.amount * 0.3;
+    if (LATE.water.amount > 0.3) c.hand = LATE.water.pos.clone();
+    LATE.water.amount = 0;
   }
-  if (key === 'aqua' && gesture !== 'charge' && L.water.amount < 1 && L.sources.length && (m.kind === 'bolt' || m.kind === 'cone' || m.kind === 'whip')) {
+  if (key === 'aqua' && gesture !== 'charge' && LATE.water.amount < 1 && LATE.sources.length && (m.kind === 'bolt' || m.kind === 'cone' || m.kind === 'whip')) {
     // Nothing carried, but there is water in the room: the move comes straight out of the nearest source you can see.
     let best = null, bestScore = 1.0;
-    for (const sc of L.sources) {
+    for (const sc of LATE.sources) {
       const to = sc.pos.clone().sub(c.eye);
       const score = to.angleTo(c.fwd) + to.length() * 0.05;
       if (to.length() < 9 && score < bestScore && lineOfSight(c.eye, sc.pos.clone().addScaledVector(sc.normal, 0.15))) { bestScore = score; best = sc; }
@@ -287,20 +287,20 @@ export function cast(key, gesture, c) {
       best.until -= 4;                               // it costs the source some of its life
     }
   }
-  if (key === 'aqua' && L.water.amount >= 1) {         // carried water: the move leaves from it, and is the stronger for it
-    L.water.amount -= 1;
+  if (key === 'aqua' && LATE.water.amount >= 1) {         // carried water: the move leaves from it, and is the stronger for it
+    LATE.water.amount -= 1;
     c.power = Math.max(c.power || 1, 1.5);
-    if (m.kind === 'bolt' || m.kind === 'whip' || m.kind === 'cone') c.hand = L.water.pos.clone();
+    if (m.kind === 'bolt' || m.kind === 'whip' || m.kind === 'cone') c.hand = LATE.water.pos.clone();
     c.wet = true;
   }
   if (c.power > 1) m = empowered(key, m, c.power);
   if (c.quiet) { const f = FAMILIAR_NOTE[key] || 500; tone(f, f * 0.6, 0.1, 0.07, key === 'terra' || key === 'gravis' ? 'sine' : 'triangle'); KIND[m.kind](key, m, c); return; }
-  S.lastCast = key;
+  ST.lastCast = key;
   moveSound(key, gesture, m.form);
-  S.hudNote = (c.wet ? 'full ' : c.power > 1 ? 'twin ' : '') + (m.form ? m.form + ' ' : '') + m.name.toLowerCase();
-  L.drawHud();
+  ST.hudNote = (c.wet ? 'full ' : c.power > 1 ? 'twin ' : '') + (m.form ? m.form + ' ' : '') + m.name.toLowerCase();
+  LATE.drawHud();
   KIND[m.kind](key, m, c);
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { ringFlourish, coneFlourish, dressEcho });
+Object.assign(LATE, { ringFlourish, coneFlourish, dressEcho });

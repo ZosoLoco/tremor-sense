@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { castSound } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene, UP } from './renderer.js?v=14';
-import { lineOfSight } from './collision.js?v=14';
-import { echoes, isLive, hit } from './echoes.js?v=14';
-import { _to, segmentDistance, flat } from './creatures.js?v=14';
-import { waterMat, energyMat, particles, PCOL, puff } from './visuals.js?v=14';
-import { addEffect } from './effects.js?v=14';
-import { objects, kick } from './objects.js?v=14';
+import { castSound } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene, UP } from './renderer.js?v=15';
+import { lineOfSight } from './collision.js?v=15';
+import { echoes, isLive, hit } from './echoes.js?v=15';
+import { _to, segmentDistance, flat } from './creatures.js?v=15';
+import { waterMat, energyMat, particles, PCOL, puff } from './visuals.js?v=15';
+import { addEffect } from './effects.js?v=15';
+import { objects, kick } from './objects.js?v=15';
 
 // ---------- water: sources, and the water you carry ----------
 // Aqua works best with water to hand. Put an open palm on any surface and water wells up there for a while.
@@ -71,7 +71,7 @@ export function updateWater(t, dt, anchor, boost = false) {
   if (!water.has) water.pos.copy(anchor);
   water.has = true;
   water.pos.lerp(anchor, Math.min(dt * 5, 1));      // it lags and swings behind the hand like something with weight
-  waterBlob.visible = water.amount > 0.05 && !L.stream.on;        // drawn out into a stream, it is not a ball any more
+  waterBlob.visible = water.amount > 0.05 && !LATE.stream.on;        // drawn out into a stream, it is not a ball any more
   waterBlob.position.copy(water.pos);
   waterBlob.scale.setScalar(0.028 + 0.022 * Math.min(water.amount, 3) + 0.012 * Math.max(water.amount - 3, 0));
 }
@@ -170,4 +170,4 @@ export function dropHold(g) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { sources, addSource, clearSources, water, castWhip });
+Object.assign(LATE, { sources, addSource, clearSources, water, castWhip });

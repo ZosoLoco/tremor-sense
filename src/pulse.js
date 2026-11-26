@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { PULSE_SPEED, PULSE_LIFE, MAX_PULSES, ACID } from './data.js?v=14';
-import { thump } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { now } from './renderer.js?v=14';
+import { PULSE_SPEED, PULSE_LIFE, MAX_PULSES, ACID } from './data.js?v=15';
+import { thump } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { now } from './renderer.js?v=15';
 
 // ---------- the pulse material, shared by every room surface ----------
 export const pulseUniforms = {
@@ -132,7 +132,7 @@ const noDrawMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.Doub
 const ROOM_DRAWN = [occluderMat, roomMat], ROOM_HIDDEN = [noDrawMat, noDrawMat];
 export const edgeGroup = new THREE.Group();
 export const dressed = new Set();
-S.occlusion = true; S.depthSeen = false;
+ST.occlusion = true; ST.depthSeen = false;
 export function dress(entry, drawn) {
   const mesh = entry.mesh, geo = mesh.geometry;
   if (entry.dressed !== geo) {
@@ -149,7 +149,7 @@ export function dress(entry, drawn) {
     dressed.add(entry);
   }
   mesh.material = drawn ? ROOM_DRAWN : ROOM_HIDDEN;
-  occluderMat.visible = S.occlusion;
+  occluderMat.visible = ST.occlusion;
   entry.edges.visible = drawn && mesh.visible && (!mesh.parent || mesh.parent.visible);
   entry.edges.matrix.copy(mesh.matrixWorld); entry.edges.matrixWorld.copy(mesh.matrixWorld);
   entry.live = true;
@@ -162,4 +162,4 @@ export function firePulse(point) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { pulseUniforms });
+Object.assign(LATE, { pulseUniforms });

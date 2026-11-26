@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms, lookOf } from './data.js?v=14';
-import { play, SFX, tone, thump, thud } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene, UP } from './renderer.js?v=14';
-import { pulseUniforms, FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=14';
-import { barriers, addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=14';
-import { echoes, glowMat, ICE, isLive, reveal, hit } from './echoes.js?v=14';
-import { _to, aimAssist, segmentDistance, flat } from './creatures.js?v=14';
-import { ENERGY, waterMat, energyMat, stoneMat, iceMat, earthMat, craggy, particles, smoke, SMOKE, STEAM, DUST, SAND, _fv, fume, PCOL, puff } from './visuals.js?v=14';
+import { ELEMENTS, forms, lookOf } from './data.js?v=15';
+import { play, SFX, tone, thump, thud } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene, UP } from './renderer.js?v=15';
+import { pulseUniforms, FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=15';
+import { barriers, addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
+import { echoes, glowMat, ICE, isLive, reveal, hit } from './echoes.js?v=15';
+import { _to, aimAssist, segmentDistance, flat } from './creatures.js?v=15';
+import { ENERGY, waterMat, energyMat, stoneMat, iceMat, earthMat, craggy, particles, smoke, SMOKE, STEAM, DUST, SAND, _fv, fume, PCOL, puff } from './visuals.js?v=15';
 
 // ---------- effects ----------
 const fxGroup = new THREE.Group();
@@ -210,19 +210,19 @@ export function castBolt(key, m, c) {
   const look = new THREE.Vector3();
   const struck = new Set(), knocked = new Set();
   const stop = (point, t) => {
-    if (m.blast) L.explode(point, key, m.blast, t, 1, !!m.noBurn);
-    if (m.form === 'sand') L.spawnCloud('sand', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
-    if (m.form === 'steam') L.spawnCloud('steam', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
-    if (m.splash) L.splash(point, t, m.splash);
-    if (m.implode) L.implode(point, m.implode, t, m.damage || 1, key);
+    if (m.blast) LATE.explode(point, key, m.blast, t, 1, !!m.noBurn);
+    if (m.form === 'sand') LATE.spawnCloud('sand', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
+    if (m.form === 'steam') LATE.spawnCloud('steam', point.clone().setY(Math.max(point.y, 0.5)), t, 4);
+    if (m.splash) LATE.splash(point, t, m.splash);
+    if (m.implode) LATE.implode(point, m.implode, t, m.damage || 1, key);
     if (m.boomerang) castBolt(key, { ...m, boomerang: false, life: 1.2 }, { ...c, t, hand: point.clone(), dir: c.eye.clone().setY(c.eye.y - 0.3).sub(point).normalize(), scale: 1 });
-    if (m.turret) { L.plantTurret(point, stopNormal || UP, t); }
+    if (m.turret) { LATE.plantTurret(point, stopNormal || UP, t); }
     if (m.summon) raiseThrall(point.clone().setY(point.y + 0.4), t);
     stopNormal = null;
     if (m.entangle) for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(point) < m.entangle) hit(e, 'flora', t, UP, { damage: 1 });
-    if (key === 'aqua') L.quench(point, m.freeze ? 1.2 : 0.8, t);
-    if (m.quake) L.quake(point, t, m.quake);
-    if (m.form === 'lava') L.heatAt(point, 0.6, t);
+    if (key === 'aqua') LATE.quench(point, m.freeze ? 1.2 : 0.8, t);
+    if (m.quake) LATE.quake(point, t, m.quake);
+    if (m.form === 'lava') LATE.heatAt(point, 0.6, t);
     return false;
   };
   let bounces = m.bounces || 0;
@@ -273,26 +273,26 @@ export function castBolt(key, m, c) {
       }
     }
     if (m.freeze || key === 'pyro' || m.form === 'lava') {   // standing water in the path changes state
-      for (const src of [...L.sources]) {
+      for (const src of [...LATE.sources]) {
         if (segmentDistance(src.pos, prev, end || mesh.position) > 0.45) continue;
-        if (m.freeze) L.freezeSource(src, t); else L.evaporate(src, t);
+        if (m.freeze) LATE.freezeSource(src, t); else LATE.evaporate(src, t);
         return stop(src.pos.clone(), t);
       }
     }
-    for (const o of L.objects) {                      // loose objects get knocked, lit, or broken
+    for (const o of LATE.objects) {                      // loose objects get knocked, lit, or broken
       if (o.dead || o.held || knocked.has(o) || o.def.cloud) continue;
       if (segmentDistance(o.pos, prev, end || mesh.position) > o.def.r + 0.06) continue;
       knocked.add(o);
       dirN.copy(vel).normalize();
       const push = Math.min(m.speed * 0.6, 7);
-      L.kick(o, dirN.x * push, 1.2, dirN.z * push);
-      if (key === 'pyro' || m.form === 'lava') L.ignite(o, t);
+      LATE.kick(o, dirN.x * push, 1.2, dirN.z * push);
+      if (key === 'pyro' || m.form === 'lava') LATE.ignite(o, t);
       if (m.freeze && o.def.water) {                // a barrel frozen solid splits into blocks of ice
         o.dead = true; puff('aqua', o.pos, 30, 2, {});
-        for (let k = 0; k < 3; k++) L.spawnObject('ice', o.pos.clone().add(new THREE.Vector3((k - 1) * 0.25, 0.1, 0)));
-        S.hudNote = 'water to ice'; L.drawHud();
+        for (let k = 0; k < 3; k++) LATE.spawnObject('ice', o.pos.clone().add(new THREE.Vector3((k - 1) * 0.25, 0.1, 0)));
+        ST.hudNote = 'water to ice'; LATE.drawHud();
       }
-      if ((m.shape === 'rock' || m.shape === 'disc') && (o.def.burns || o.def.water)) L.destroyObject(o, t);
+      if ((m.shape === 'rock' || m.shape === 'disc') && (o.def.burns || o.def.water)) LATE.destroyObject(o, t);
       if (!m.pierce) { impact(o.pos, dirN.clone().negate(), key, t, 0.25); return stop(o.pos.clone(), t); }
     }
     if (end) { impact(wall.point, wall.normal, key, t, m.shape === 'rock' ? 0.4 : 0.25); stopNormal = wall.normal.clone(); return stop(wall.point.clone(), t); }
@@ -320,31 +320,31 @@ export function castCone(key, m, c) {
   const color = ELEMENTS[key].color;
   const d = c.dir.clone().normalize();
   const origin = c.hand.clone();
-  L.coneFlourish(key, m, origin, d, c.t);
+  LATE.coneFlourish(key, m, origin, d, c.t);
   for (const e of echoes) {
     if (!isLive(e, c.t)) continue;
     _to.copy(e.group.position).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && (m.sonic || lineOfSight(origin, e.group.position))) hit(e, key, c.t, d, m);
   }
   if (key === 'pyro') {
-    for (const src of [...L.sources]) { _to.copy(src.pos).sub(origin); if (_to.length() < m.range && _to.angleTo(d) < m.angle + 0.15) L.evaporate(src, c.t); }
+    for (const src of [...LATE.sources]) { _to.copy(src.pos).sub(origin); if (_to.length() < m.range && _to.angleTo(d) < m.angle + 0.15) LATE.evaporate(src, c.t); }
   }
   for (const b of [...barriers]) {                // a shove sends a standing wall on its way
     _to.copy(b.collider.position).setY(origin.y).sub(origin);
     if (_to.length() < 2.6 && _to.angleTo(d) < m.angle + 0.4) b.struck(d, key, c.t);
   }
-  for (const o of L.objects) {
+  for (const o of LATE.objects) {
     if (o.dead || o.held) continue;
     _to.copy(o.pos).sub(origin);
     if (_to.length() < m.range && _to.angleTo(d) < m.angle && lineOfSight(origin, o.pos)) {
       const push = (key === 'aero' ? 8 : 3) * (m.from ? -0.8 : 1);     // vacuum drags it toward you
       const wasHostile = o.hostile;
-      L.kick(o, d.x * push, 1.5, d.z * push);
+      LATE.kick(o, d.x * push, 1.5, d.z * push);
       if (wasHostile && o.owner && !o.owner.down) {  // blown straight back at whoever sent it
-        L.sendBack(o, 9);
-        S.hudNote = 'deflect'; L.drawHud();
+        LATE.sendBack(o, 9);
+        ST.hudNote = 'deflect'; LATE.drawHud();
       }
-      if (key === 'pyro' || m.form === 'lava') L.ignite(o, c.t);
+      if (key === 'pyro' || m.form === 'lava') LATE.ignite(o, c.t);
     }
   }
   // The blast itself: a cone of the element that rushes out and thins, plus loose matter thrown with it.
@@ -459,7 +459,7 @@ export function castColumn(key, m, c) {
   };
   column.scale.set(pw, 0.001, pw);
   if (m.pulse) firePulse(base);                  // Terra's eruption also ripples the room
-  if (key === 'aqua' && !m.form) L.addSource(base, axis, c.t, 20);     // where water came up, it keeps coming for a while
+  if (key === 'aqua' && !m.form) LATE.addSource(base, axis, c.t, 20);     // where water came up, it keeps coming for a while
   puff(key, base, key === 'terra' ? 40 : 24, 2.4, { up: 2.5, jitter: 0.2 });
   if (key === 'terra') fume(DUST, base, 7, { size: 0.35, jitter: 0.5, rise: 0.5, life: 1.8 });
   const born = c.t;
@@ -494,12 +494,12 @@ export function castColumn(key, m, c) {
       struck = true;
       const mm = upright ? m : { ...m, launch: false };      // only a spire from below tosses things into the air
       for (const e of echoes) if (isLive(e, t) && inside(e.group.position, 0)) hit(e, key, t, axis, mm);
-      for (const o of L.objects) {
+      for (const o of LATE.objects) {
         if (o.dead || o.held || !inside(o.pos, o.def.r)) continue;
-        L.kick(o, axis.x * 6, axis.y * 6, axis.z * 6);
-        if (key === 'pyro' || m.form === 'lava') L.ignite(o, t);
+        LATE.kick(o, axis.x * 6, axis.y * 6, axis.z * 6);
+        if (key === 'pyro' || m.form === 'lava') LATE.ignite(o, t);
       }
-      if (key === 'pyro' || m.form === 'lava') L.heatAt(base, m.radius + 0.6, t);
+      if (key === 'pyro' || m.form === 'lava') LATE.heatAt(base, m.radius + 0.6, t);
       if (m.stand) {
         endAt = t + m.stand;
         barrier = addBarrier(new THREE.CylinderGeometry(Math.max(m.bottom, 0.17) * 0.5 * pw, Math.max(m.bottom, 0.17) * pw, height, 8).translate(0, height / 2, 0), column, {
@@ -519,7 +519,7 @@ export function castColumn(key, m, c) {
 export function castRing(key, m, c) {
   const color = ELEMENTS[key].color;
   const centre = c.ground.clone();
-  L.ringFlourish(key, m, centre, c.t);
+  LATE.ringFlourish(key, m, centre, c.t);
   const mk = (inner) => {
     const r = new THREE.Mesh(new THREE.RingGeometry(inner, 1, 72).rotateX(-Math.PI / 2), glowMat(color, 0.9));
     r.position.copy(centre).setY(centre.y + 0.02);
@@ -534,7 +534,7 @@ export function castRing(key, m, c) {
   );
   rim.position.copy(centre);
   puff(key, centre, 30, 3, { up: 2, jitter: 0.1 });
-  if (key === 'aqua') L.addSource(centre, UP, c.t, 20);
+  if (key === 'aqua') LATE.addSource(centre, UP, c.t, 20);
   const edge = new THREE.Vector3();
   const struck = new Set();
   const born = c.t;
@@ -562,13 +562,13 @@ export function castRing(key, m, c) {
         hit(e, key, t, _to.set(p.x - centre.x, 0.6, p.z - centre.z).normalize(), m);
       }
     }
-    if (key === 'pyro') for (const src of [...L.sources]) if (Math.hypot(src.pos.x - centre.x, src.pos.z - centre.z) < r && Math.abs(src.pos.y - centre.y) < 0.6) L.evaporate(src, t);
-    for (const o of L.objects) {
+    if (key === 'pyro') for (const src of [...LATE.sources]) if (Math.hypot(src.pos.x - centre.x, src.pos.z - centre.z) < r && Math.abs(src.pos.y - centre.y) < 0.6) LATE.evaporate(src, t);
+    for (const o of LATE.objects) {
       if (o.dead || o.held || struck.has(o) || Math.hypot(o.pos.x - centre.x, o.pos.z - centre.z) > r) continue;
       struck.add(o);
       _to.set(o.pos.x - centre.x, 0, o.pos.z - centre.z).normalize();
-      L.kick(o, _to.x * 2.5, 3.5, _to.z * 2.5);
-      if (key === 'pyro' || m.form === 'lava') L.ignite(o, t);
+      LATE.kick(o, _to.x * 2.5, 3.5, _to.z * 2.5);
+      if (key === 'pyro' || m.form === 'lava') LATE.ignite(o, t);
     }
     return k < 1;
   });
@@ -636,7 +636,7 @@ export function castWall(key, m, c) {
     if (_to.lengthSq() > 0.01) { d.copy(_to).normalize(); right.crossVectors(d, n).normalize(); face(); }
     removeBarrier(barrier); barrier = null;
     struck.clear();
-    thump(); S.hudNote = 'rampart away'; L.drawHud();
+    thump(); ST.hudNote = 'rampart away'; LATE.drawHud();
   };
   const crumble = (t) => {
     if (phase !== 'stand') return;
@@ -685,10 +685,10 @@ export function castWall(key, m, c) {
         struck.add(e);
         hit(e, key, t, d, m);
       }
-      for (const o of L.objects) {
+      for (const o of LATE.objects) {
         if (o.dead || o.held || !within(o.pos, 0.35 + step, o.def.r)) continue;
-        o.vel.copy(d).multiplyScalar(5.5); o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false; L.turn(o);
-        if (m.form === 'lava') L.ignite(o, t);
+        o.vel.copy(d).multiplyScalar(5.5); o.vel.y = Math.max(o.vel.y, 0.8); o.rest = false; LATE.turn(o);
+        if (m.form === 'lava') LATE.ignite(o, t);
       }
     }
     const sink = stoppedAt < 0 ? 0 : Math.min((t - stoppedAt) / 0.3, 1);
@@ -753,10 +753,10 @@ export function castFault(key, m, c) {
       if (!s.struck && rise >= 1) {
         s.struck = true;
         for (const e of echoes) if (isLive(e, t) && reached(e.group.position, s, 0)) hit(e, key, t, n, m);
-        for (const o of L.objects) {
+        for (const o of LATE.objects) {
           if (o.dead || o.held || !reached(o.pos, s, o.def.r)) continue;
-          L.kick(o, n.x * 7, n.y * 7, n.z * 7);
-          if (m.form === 'lava') L.ignite(o, t);
+          LATE.kick(o, n.x * 7, n.y * 7, n.z * 7);
+          if (m.form === 'lava') LATE.ignite(o, t);
         }
       }
     });
@@ -790,7 +790,7 @@ function jagged(a, b, wobble) {
 }
 
 export function zap(a, b, t) {
-  const eye = L.viewerPos.clone();
+  const eye = LATE.viewerPos.clone();
   const arc = new THREE.Mesh(ribbonGeo(jagged(a, b, 0.08), 0.02, eye), glowMat(new THREE.Color(0xffffff), 1));
   addLight(b, VOLT_LIGHT, 2, 0.2);
   puff('volt', b, 10, 2.5, {});
@@ -899,9 +899,9 @@ export function castVoid(key, m, c) {
           e.restY = e.home.y; e.airborne = false; e.vel.set(0, 0, 0);
         }
       }
-      for (const o of L.objects) {
+      for (const o of LATE.objects) {
         if (o.dead || o.held || o.pos.distanceTo(centre) > m.radius) continue;
-        o.rest = false; L.turn(o);
+        o.rest = false; LATE.turn(o);
         o.vel.copy(centre).sub(o.pos).multiplyScalar(7);
       }
       if (k >= 1) {
@@ -938,7 +938,7 @@ export function castLance(key, m, c) {
   spear.add(bone, sinew);
   spear.position.copy(c.hand); spear.lookAt(tip);
   for (const e of echoes) if (isLive(e, t) && segmentDistance(e.group.position, c.hand, tip) < 0.32) hit(e, key, t, d, m);
-  for (const o of L.objects) if (!o.dead && !o.held && !o.def.cloud && segmentDistance(o.pos, c.hand, tip) < o.def.r + 0.1) L.kick(o, d.x * 5, 1.5, d.z * 5);
+  for (const o of LATE.objects) if (!o.dead && !o.held && !o.def.cloud && segmentDistance(o.pos, c.hand, tip) < o.def.r + 0.1) LATE.kick(o, d.x * 5, 1.5, d.z * 5);
   if (wall) impact(wall.point, wall.normal, key, t, 0.25);
   addEffect([spear], (n) => {
     const a = n - t, k = a < 0.07 ? a / 0.07 : a < 0.2 ? 1 : Math.max(1 - (a - 0.2) / 0.16, 0);
@@ -962,15 +962,15 @@ export function raiseThrall(pos, t) {
   const self = { g, pos: g.position, vel: new THREE.Vector3(), until: t + (forms.necro === 'plague' ? 36 : 18), biteAt: 0 };
   thralls.push(self);
   play(SFX.necro.rise); puff('necro', pos, 30, 1.8, { up: 1.5 });
-  const epoch = S.shapeEpoch, to = new THREE.Vector3();
+  const epoch = ST.shapeEpoch, to = new THREE.Vector3();
   let then = t;
   addEffect([g], (n) => {
     const dt = Math.min(n - then, 0.08); then = n;
-    if (epoch !== S.shapeEpoch || n > self.until) { thralls.splice(thralls.indexOf(self), 1); puff('necro', self.pos, 24, 1.6, {}); return false; }
+    if (epoch !== ST.shapeEpoch || n > self.until) { thralls.splice(thralls.indexOf(self), 1); puff('necro', self.pos, 24, 1.6, {}); return false; }
     g.scale.setScalar(Math.min((n - t) / 0.4, 1) * 1.2);
     let prey = null, near = 9;
     for (const e of echoes) { if (e.down) continue; const d = e.group.position.distanceTo(self.pos); if (d < near) { near = d; prey = e; } }
-    for (const o of L.objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.5) { o.dead = true; play(SFX.necro.bite); puff('necro', o.pos, 12, 1.6, {}); self.until -= 3; }   // it takes the hit for you
+    for (const o of LATE.objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.5) { o.dead = true; play(SFX.necro.bite); puff('necro', o.pos, 12, 1.6, {}); self.until -= 3; }   // it takes the hit for you
     if (prey) {
       to.copy(prey.group.position).sub(self.pos);
       self.vel.lerp(to.clone().setLength(near > 0.4 ? 1.7 : 0), Math.min(dt * 4, 1));
@@ -978,7 +978,7 @@ export function raiseThrall(pos, t) {
       reveal(prey, n, 1, ELEMENTS.necro.color);
       if (near < 0.5 && n > self.biteAt) { self.biteAt = n + 1; play(SFX.necro.bite); hit(prey, 'necro', n, to.normalize(), { damage: 1, venom: forms.necro === 'plague' }); }
     } else {                                         // nothing to hunt: it comes back and waits by your shoulder
-      to.copy(L.viewerPos).add(L._np.set(Math.sin(thralls.indexOf(self) * 2.1) * 0.6, 0.15, Math.cos(thralls.indexOf(self) * 2.1) * 0.6)).sub(self.pos);
+      to.copy(LATE.viewerPos).add(LATE._np.set(Math.sin(thralls.indexOf(self) * 2.1) * 0.6, 0.15, Math.cos(thralls.indexOf(self) * 2.1) * 0.6)).sub(self.pos);
       self.vel.lerp(to.multiplyScalar(1.5).clampLength(0, 1.5), Math.min(dt * 3, 1));
     }
     self.pos.addScaledVector(self.vel, dt);
@@ -986,7 +986,7 @@ export function raiseThrall(pos, t) {
     if (Math.random() < 0.2) puff('necro', self.pos, 1, 0.2, {});
     return true;
   });
-  S.hudNote = 'it rises'; L.drawHud();
+  ST.hudNote = 'it rises'; LATE.drawHud();
   return self;
 }
 export function castLegion(key, m, c) {
@@ -994,4 +994,4 @@ export function castLegion(key, m, c) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { zap, raiseThrall });
+Object.assign(LATE, { zap, raiseThrall });

@@ -1,19 +1,19 @@
 import * as THREE from 'three';
-import { ELEMENTS, FORMS, forms, MOVES } from './data.js?v=14';
-import { play, SFX, FORM_SFX, moveSound, thump, tick } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { summonBlade, WEAPON } from './constructs.js?v=14';
-import { formOf } from './core.js?v=14';
-import { scene, UP, ZERO, now } from './renderer.js?v=14';
-import { FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=14';
-import { addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=14';
-import { echoes, glowMat, roomBounds, isLive, reveal, hit } from './echoes.js?v=14';
-import { segmentDistance, flat } from './creatures.js?v=14';
-import { waterMat, energyMat, iceMat, earthMat, craggy, particles, STEAM, thinned, fume, PCOL, puff } from './visuals.js?v=14';
-import { addEffect, castBolt, ribbonGeo, zap, raiseThrall } from './effects.js?v=14';
-import { cast } from './flourish.js?v=14';
-import { objects, spawnObject, spawnCloud, ignite, kick, sendBack, turn, explode, crushObject } from './objects.js?v=14';
-import { WATER_MAX, addSource, water } from './water.js?v=14';
+import { ELEMENTS, FORMS, forms, MOVES } from './data.js?v=15';
+import { play, SFX, FORM_SFX, moveSound, thump, tick } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { summonBlade, WEAPON } from './constructs.js?v=15';
+import { formOf } from './core.js?v=15';
+import { scene, UP, ZERO, now } from './renderer.js?v=15';
+import { FIRE_LIGHT, LAVA_LIGHT, VOLT_LIGHT, lightNow, firePulse } from './pulse.js?v=15';
+import { addBarrier, removeBarrier, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
+import { echoes, glowMat, roomBounds, isLive, reveal, hit } from './echoes.js?v=15';
+import { segmentDistance, flat } from './creatures.js?v=15';
+import { waterMat, energyMat, iceMat, earthMat, craggy, particles, STEAM, thinned, fume, PCOL, puff } from './visuals.js?v=15';
+import { addEffect, castBolt, ribbonGeo, zap, raiseThrall } from './effects.js?v=15';
+import { cast } from './flourish.js?v=15';
+import { objects, spawnObject, spawnCloud, ignite, kick, sendBack, turn, explode, crushObject } from './objects.js?v=15';
+import { WATER_MAX, addSource, water } from './water.js?v=15';
 
 // ---------- shaping: pinch ----------
 // A pinch (thumb and index together, the other fingers out) is the hands-on verb. What it does depends on the discipline.
@@ -62,12 +62,12 @@ stream.beads = [0, 1, 2, 3, 4, 5, 6].map(() => { const bd = new THREE.Mesh(new T
 stream.key = 'aqua';
 for (const m of [stream.mesh, stream.sheet]) { m.visible = false; m.frustumCulled = false; m.renderOrder = 15; scene.add(m); }
 // What drives the stream this frame: { root, dir, vel, eye, grip, squeeze, end }. Hands fill it in; so does the preview.
-S.streamCtl = null;
+ST.streamCtl = null;
 const streamLength = () => stream.key === 'morph' ? 1.9 : Math.min(0.5 + 0.45 * water.amount, 2.6);
 export function startStream(ctl, t, key = 'aqua') {
   if (stream.on) return true;
   stream.key = key;
-  if (key === 'aqua' && water.amount < 0.5) { S.hudNote = 'no water to draw out'; S.lastCast = 'aqua'; L.drawHud(); return false; }
+  if (key === 'aqua' && water.amount < 0.5) { ST.hudNote = 'no water to draw out'; ST.lastCast = 'aqua'; LATE.drawHud(); return false; }
   stream.on = true; stream.latch = null; stream.twoHand = false; stream.lastGrip = !!ctl.grip; stream.lastSqueeze = false;
   stream.struck.clear(); stream.seenT = t; stream.lastCtl = ctl;
   const from = key === 'aqua' && water.has ? water.pos : ctl.root;
@@ -80,7 +80,7 @@ export function startStream(ctl, t, key = 'aqua') {
     n.prev.copy(n.p); n.last.copy(n.p);
   });
   stream.born = t;
-  play(SFX[key].draw); S.hudNote = key === 'morph' ? 'glaive' : 'stream'; S.lastCast = key; L.drawHud();
+  play(SFX[key].draw); ST.hudNote = key === 'morph' ? 'glaive' : 'stream'; ST.lastCast = key; LATE.drawHud();
   return true;
 }
 export function endStream(t, ctl) {
@@ -99,16 +99,16 @@ function flingLatched(ctl) {
     if (ctl.vel.y > 1 && !l.e.airborne) { l.e.airborne = true; l.e.vel.y = 2.2; }
   }
   stream.latch = null;
-  S.hudNote = 'let go'; L.drawHud();
+  ST.hudNote = 'let go'; LATE.drawHud();
 }
 const _sv = new THREE.Vector3(), _sd = new THREE.Vector3(), _sline = new THREE.Vector3(), _sa2 = new THREE.Vector3();
 export function updateStream(t, dt) {
   if (!stream.on) return;
-  let ctl = S.streamCtl;
+  let ctl = ST.streamCtl;
   if (ctl) { stream.seenT = t; stream.lastCtl = ctl; }
   else if (t - stream.seenT < 0.3) ctl = stream.lastCtl;           // a dropped frame of tracking does not spill it
   const flesh = stream.key === 'morph', SK = stream.key;
-  if (!ctl || S.selected !== SK || (!flesh && water.amount < 0.3)) { endStream(t, ctl); return; }
+  if (!ctl || ST.selected !== SK || (!flesh && water.amount < 0.3)) { endStream(t, ctl); return; }
   const form = flesh ? 'flesh' : forms.aqua, N = STREAM_N, nodes = stream.nodes, root = ctl.root;
   const base = streamLength() * Math.min(0.15 + (t - stream.born) / 0.5, 1);
   if (stream.latch && (stream.latch.e ? stream.latch.e.down : (stream.latch.o.dead || stream.latch.o.held))) stream.latch = null;
@@ -196,7 +196,7 @@ export function updateStream(t, dt) {
     if (best) {
       stream.latch = best;
       stream.tether = Math.max(latchPos().distanceTo(root) * 0.9, 0.4);     // it goes taut at the distance you caught it
-      play(SFX.aqua.latch); S.hudNote = flesh ? 'hooked' : 'took hold'; S.lastCast = SK; L.drawHud();
+      play(SFX.aqua.latch); ST.hudNote = flesh ? 'hooked' : 'took hold'; ST.lastCast = SK; LATE.drawHud();
       puff(SK, latchPos(), 24, 1.8, {});
       if (best.e) {
         if (flesh) { /* a hook, not a soaking */ } else if (form === 'ice') { best.e.frozenUntil = t + 6; best.e.vel.set(0, best.e.vel.y, 0); }
@@ -219,13 +219,13 @@ export function updateStream(t, dt) {
       if (ctl.vel.y > 1.6 && !e.airborne && !(e.frozenUntil > t)) { e.airborne = true; e.vel.y = 2.2; }
       e.blindUntil = Math.max(e.blindUntil, t + 0.3);
       e.revealedUntil = Math.max(e.revealedUntil, t + 1);
-      if (ctl.squeeze && !stream.lastSqueeze) { S.hudNote = 'constrict'; hit(e, SK, t, ZERO, { damage: 1, kind: 'grip', freeze: form === 'ice' }); }
+      if (ctl.squeeze && !stream.lastSqueeze) { ST.hudNote = 'constrict'; hit(e, SK, t, ZERO, { damage: 1, kind: 'grip', freeze: form === 'ice' }); }
     } else {                                       // an object: a weight on the end of a rope
       const o = stream.latch.o;
       o.vel.addScaledVector(_sd, over * 60 * dt);
       o.vel.multiplyScalar(Math.max(1 - 1.2 * dt, 0));
       o.rest = false;
-      if (ctl.squeeze && !stream.lastSqueeze) { crushObject(o, t); stream.latch = null; S.hudNote = 'crush'; L.drawHud(); }
+      if (ctl.squeeze && !stream.lastSqueeze) { crushObject(o, t); stream.latch = null; ST.hudNote = 'crush'; LATE.drawHud(); }
     }
   }
   stream.lastSqueeze = !!ctl.squeeze;
@@ -248,9 +248,9 @@ export function updateStream(t, dt) {
       let hitNode = null;
       for (const n of nodes) if (Math.hypot(n.p.x - o.pos.x, n.p.z - o.pos.z) < 0.3 && o.pos.y < n.p.y + 0.15 && o.pos.y > n.p.y - 0.7) { hitNode = n; break; }
       if (!hitNode) continue;
-      if (form === 'ice') { turn(o); sendBack(o, 9); tick(); S.hudNote = 'turned on the ice'; }
-      else { o.dead = true; puff('aqua', o.pos, 26, 2.2, {}); water.amount = Math.min(water.amount + 0.5, WATER_MAX * 2); tick(); S.hudNote = 'swallowed'; }
-      S.lastCast = 'aqua'; L.drawHud();
+      if (form === 'ice') { turn(o); sendBack(o, 9); tick(); ST.hudNote = 'turned on the ice'; }
+      else { o.dead = true; puff('aqua', o.pos, 26, 2.2, {}); water.amount = Math.min(water.amount + 0.5, WATER_MAX * 2); tick(); ST.hudNote = 'swallowed'; }
+      ST.lastCast = 'aqua'; LATE.drawHud();
     }
   }
 
@@ -278,10 +278,10 @@ export function plantWall(a, b, t) {
   const width = Math.max(along.length(), 0.6);
   along.normalize();
   const height = Math.min(Math.max(Math.max(a.y, b.y) - baseY, 0.7), 1.8);
-  tick(); S.lastCast = 'aqua';
+  tick(); ST.lastCast = 'aqua';
   if (form === 'steam') {                          // steam will not stand: it hangs there as a bank of cloud
     for (let i = 0; i < 3; i++) spawnCloud('steam', a.clone().lerp(b, i / 2).setY(baseY + 0.7), t, 7);
-    S.hudNote = 'steam bank'; L.drawHud();
+    ST.hudNote = 'steam bank'; LATE.drawHud();
     return null;
   }
   const wall = new THREE.Group();
@@ -310,7 +310,7 @@ export function plantWall(a, b, t) {
     struck: (dv, k, tt) => {
       const c = centre(), d = flat(dv, along);
       if (k === 'pyro' && form === 'ice') {            // fire on an ice wall: it melts where it stands, and the melt is water you can use
-        fall(tt, true); addSource(wall.position.clone(), UP, tt, 25); spawnCloud('steam', c, tt, 4); play(SFX.quench); S.hudNote = 'melted'; L.drawHud();
+        fall(tt, true); addSource(wall.position.clone(), UP, tt, 25); spawnCloud('steam', c, tt, 4); play(SFX.quench); ST.hudNote = 'melted'; LATE.drawHud();
         return;
       }
       fall(tt, true);
@@ -330,45 +330,45 @@ export function plantWall(a, b, t) {
     return alive;
   });
   play(SFX.aqua.wall); if (form === 'ice') play(FORM_SFX.ice);
-  S.hudNote = form === 'ice' ? 'ice wall' : 'water wall'; L.drawHud();
+  ST.hudNote = form === 'ice' ? 'ice wall' : 'water wall'; LATE.drawHud();
   return barrier;
 }
 
 // --- drawn lines ---
 const DRAW_STEP = 0.12, DRAW_MAX = 28;
 export const DRAWN = { terra: 'Ridge', pyro: 'Fire Line', aqua: 'Stream', aero: 'Current', lumen: 'Mirror Line', gravis: 'Rift', flora: 'Snare', astra: 'Constellation', morph: 'Glaive', umbra: 'Veil', necro: 'Bone Fence' };   // what a pinch makes
-S.drawing = null;                                 // { key, pts, owner }
-export function drawBegin(key, p, owner = null) { S.drawing = { key, pts: [p.clone()], owner }; L.noteGesture('pinch'); }
+ST.drawing = null;                                 // { key, pts, owner }
+export function drawBegin(key, p, owner = null) { ST.drawing = { key, pts: [p.clone()], owner }; LATE.noteGesture('pinch'); }
 export function drawAdd(p) {
-  if (!S.drawing) return;
-  const last = S.drawing.pts[S.drawing.pts.length - 1];
-  if (p.distanceTo(last) < DRAW_STEP || S.drawing.pts.length >= DRAW_MAX) return;
-  S.drawing.pts.push(p.clone());
-  puff(S.drawing.key, p, 3, 0.4, {});
+  if (!ST.drawing) return;
+  const last = ST.drawing.pts[ST.drawing.pts.length - 1];
+  if (p.distanceTo(last) < DRAW_STEP || ST.drawing.pts.length >= DRAW_MAX) return;
+  ST.drawing.pts.push(p.clone());
+  puff(ST.drawing.key, p, 3, 0.4, {});
 }
 export function drawEnd(t) {
-  const d = S.drawing;
-  S.drawing = null;
+  const d = ST.drawing;
+  ST.drawing = null;
   if (!d || d.pts.length < 3) return null;
   // A sigil. If the line closes on itself it is a circle, and a circle summons: the discipline's own familiar appears in it.
   let len = 0; for (let i = 1; i < d.pts.length; i++) len += d.pts[i].distanceTo(d.pts[i - 1]);
   if (len > 0.7 && d.pts[0].distanceTo(d.pts[d.pts.length - 1]) < 0.22) {
     const centre = new THREE.Vector3(); for (const q of d.pts) centre.add(q); centre.divideScalar(d.pts.length);
-    S.lastCast = d.key; play(SFX.summon);
+    ST.lastCast = d.key; play(SFX.summon);
     const made = summonFamiliar(d.key, centre, t);
-    L.drawHud();
+    LATE.drawHud();
     return made;
   }
   // A V (any line with a hard corner in it) is a weapon: the discipline's own, in the hand that drew it.
   if (WEAPON[d.key]) {
     let corner = false;
     for (let i = 2; i < d.pts.length - 1 && !corner; i++) { const a = d.pts[i].clone().sub(d.pts[i - 2]).normalize(), b = d.pts[Math.min(i + 2, d.pts.length - 1)].clone().sub(d.pts[i]).normalize(); if (a.dot(b) < -0.15) corner = true; }
-    const hand = d.owner || L.previewHand;
-    if (corner && hand) { const made = summonBlade(hand, t, d.key); L.drawHud(); return made; }
+    const hand = d.owner || LATE.previewHand;
+    if (corner && hand) { const made = summonBlade(hand, t, d.key); LATE.drawHud(); return made; }
   }
-  moveSound(d.key, 'draw', formOf(d.key) === FORMS[d.key][0] ? null : formOf(d.key)); S.lastCast = d.key;
+  moveSound(d.key, 'draw', formOf(d.key) === FORMS[d.key][0] ? null : formOf(d.key)); ST.lastCast = d.key;
   const made = d.key === 'aero' ? makeCurrent(d.pts, t) : d.key === 'pyro' ? fireLine(d.pts, t) : d.key === 'terra' ? raiseRidge(d.pts, t) : d.key === 'lumen' ? mirrorLine(d.pts, t) : d.key === 'gravis' ? rift(d.pts, t) : d.key === 'flora' ? snare(d.pts, t) : d.key === 'astra' ? constellation(d.pts, t) : d.key === 'morph' ? raiseRidge(d.pts, t, 'bone') : d.key === 'umbra' ? mirrorLine(d.pts, t, 'shadow') : d.key === 'necro' ? raiseRidge(d.pts, t, 'bone') : null;
-  L.drawHud();
+  LATE.drawHud();
   return made;
 }
 
@@ -388,7 +388,7 @@ export const familiars = [];
 export function summonFamiliar(key, centre, t) {
   if (key === 'flora') {                             // Flora's familiar is the snapper: it grows on the nearest surface to the circle
     const s = nearestRoomSurface(centre, 3);
-    S.hudNote = 'snapper';
+    ST.hudNote = 'snapper';
     return plantTurret(s ? s.point.clone() : centre.clone().setY(0), s ? s.normal.clone() : UP.clone(), t);
   }
   if (key === 'necro') { raiseThrall(centre.clone(), t); return raiseThrall(centre.clone().add(new THREE.Vector3(0.3, 0, 0)), t); }
@@ -396,24 +396,24 @@ export function summonFamiliar(key, centre, t) {
   if (!F) return null;
   if (familiars.length >= 2) familiars[0].until = 0;
   const g = new THREE.Group();
-  const body = new THREE.Mesh(F.geo(), key === 'terra' ? earthMat(S.terraForm) : key === 'umbra' ? new THREE.MeshBasicMaterial({ color: 0x08020f }) : energyMat(key, { scale: [9, 9, 9], cut: 0.25 }));
+  const body = new THREE.Mesh(F.geo(), key === 'terra' ? earthMat(ST.terraForm) : key === 'umbra' ? new THREE.MeshBasicMaterial({ color: 0x08020f }) : energyMat(key, { scale: [9, 9, 9], cut: 0.25 }));
   const halo = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.006, 6, 40), glowMat(ELEMENTS[key].color.clone(), 0.8));
   g.add(body, halo);
   g.position.copy(centre); g.scale.setScalar(0.01);
   const self = { key, g, pos: g.position, until: t + 22, fireAt: t + 0.8, home: centre.clone(), phase: Math.random() * 6 };
   familiars.push(self);
   puff(key, centre, 30, 2, {});
-  const epoch = S.shapeEpoch, to = new THREE.Vector3();
+  const epoch = ST.shapeEpoch, to = new THREE.Vector3();
   let then = t;
   addEffect([g], (n) => {
     const dt = Math.min(n - then, 0.08); then = n;
-    if (epoch !== S.shapeEpoch || n > self.until) { familiars.splice(familiars.indexOf(self), 1); puff(key, self.pos, 20, 1.6, {}); return false; }
+    if (epoch !== ST.shapeEpoch || n > self.until) { familiars.splice(familiars.indexOf(self), 1); puff(key, self.pos, 20, 1.6, {}); return false; }
     g.scale.setScalar(Math.min((n - t) / 0.4, 1));
     body.rotation.y += dt * (key === 'aero' ? 14 : 1.5); body.rotation.x += dt * 0.7;
     halo.rotation.x = Math.PI / 2 + Math.sin(n * 2 + self.phase) * 0.5; halo.rotation.y += dt * 2;
     // where it likes to be
-    if (F.habit === 'follow') to.copy(L.viewerPos).add(_np.set(0.45, 0.25, -0.2));
-    else if (F.habit === 'orbit') to.copy(L.viewerPos).add(_np.set(Math.cos(n * 1.4) * 0.8, 0.2, Math.sin(n * 1.4) * 0.8));
+    if (F.habit === 'follow') to.copy(LATE.viewerPos).add(_np.set(0.45, 0.25, -0.2));
+    else if (F.habit === 'orbit') to.copy(LATE.viewerPos).add(_np.set(Math.cos(n * 1.4) * 0.8, 0.2, Math.sin(n * 1.4) * 0.8));
     else if (F.habit === 'roam') to.copy(self.home).add(_np.set(Math.cos(n * 0.7 + self.phase) * 1.2, Math.sin(n * 1.1) * 0.2, Math.sin(n * 0.7 + self.phase) * 1.2));
     else if (F.habit === 'high') to.copy(self.home).setY(Math.min(self.home.y + 0.9, roomBounds().max.y - 0.25));
     else to.copy(self.home);
@@ -431,7 +431,7 @@ export function summonFamiliar(key, centre, t) {
     }
     return true;
   });
-  S.hudNote = F.name.toLowerCase();
+  ST.hudNote = F.name.toLowerCase();
   return self;
 }
 
@@ -444,14 +444,14 @@ function endCurrent(c) {
   currents.splice(i, 1);
   scene.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh.material.dispose();
 }
-S.shapeEpoch = 0;                                 // a new game ends every drawn line still standing
+ST.shapeEpoch = 0;                                 // a new game ends every drawn line still standing
 function clearShaping() {
-  S.shapeEpoch++;
+  ST.shapeEpoch++;
   for (const f of fireLines) f.alive = false;
   fireLines.length = 0;
   while (currents.length) endCurrent(currents[0]);
   endStream(now(), null);
-  S.drawing = null; S.streamCtl = null;
+  ST.drawing = null; ST.streamCtl = null;
 }
 export function makeCurrent(pts, t) {
   if (currents.length >= 3) endCurrent(currents[0]);
@@ -464,7 +464,7 @@ export function makeCurrent(pts, t) {
   scene.add(c.mesh);
   currents.push(c);
   thump();
-  S.hudNote = form === 'vacuum' ? 'undertow' : form === 'sound' ? 'drone' : 'current';
+  ST.hudNote = form === 'vacuum' ? 'undertow' : form === 'sound' ? 'drone' : 'current';
   return c;
 }
 export const _cv = new THREE.Vector3(), _cp = new THREE.Vector3();
@@ -531,12 +531,12 @@ export function quench(point, radius, t) {
   }
   for (const f of fireLines) {
     if (!f.alive || nearestOnPath(point, f.pts, _near).dist > radius) continue;
-    if (f.flora) { f.until += 6; S.hudNote = 'watered: it holds longer'; L.drawHud(); continue; }     // water feeds roots
+    if (f.flora) { f.until += 6; ST.hudNote = 'watered: it holds longer'; LATE.drawHud(); continue; }     // water feeds roots
     f.alive = false; any = true;
     spawnCloud('steam', _near.point.clone().setY(Math.max(_near.point.y, 0.5)), t, 5);
   }
   for (let i = fireLines.length - 1; i >= 0; i--) if (!fireLines[i].alive) fireLines.splice(i, 1);
-  if (any) { play(SFX.quench); fume(STEAM, point, 6, { size: 0.3, rise: 0.8, life: 1.4 }); S.hudNote = 'quenched'; L.drawHud(); }
+  if (any) { play(SFX.quench); fume(STEAM, point, 6, { size: 0.3, rise: 0.8, life: 1.4 }); ST.hudNote = 'quenched'; LATE.drawHud(); }
   return any;
 }
 // --- Pyro: a line of fire ---
@@ -548,7 +548,7 @@ export function fireLine(pts, t) {
     thump();
     for (const e of echoes) if (!e.down && nearestOnPath(e.group.position, pts, _near).dist < 0.5) hit(e, 'pyro', t, UP, { damage: 2, volt: true, arc: true });
     for (const o of objects) if (!o.dead && o.hostile && nearestOnPath(o.pos, pts, _near).dist < 0.5) { o.dead = true; puff('volt', o.pos, 14, 2, {}); }
-    S.hudNote = 'live wire';
+    ST.hudNote = 'live wire';
     return { form };
   }
   if (form === 'blast') {                           // a fuse: it goes off point by point
@@ -557,15 +557,15 @@ export function fireLine(pts, t) {
       while (next < pts.length && n - t > next * 0.07) { explode(pts[next], 'pyro', 0.6, n, 1, true); next += 2; }
       return next < pts.length;
     });
-    S.hudNote = 'fuse';
+    ST.hudNote = 'fuse';
     return { form };
   }
-  const until = t + 7, last = new Map(), epoch = S.shapeEpoch;
+  const until = t + 7, last = new Map(), epoch = ST.shapeEpoch;
   const self = { pts, until, alive: true };
   fireLines.push(self);
   addEffect([], (n) => {
-    if (epoch !== S.shapeEpoch || !self.alive) { self.alive = false; return false; }
-    for (const f of fireLines) if (f.flora && f.alive && nearestOnPath(pts[pts.length >> 1], f.pts, _near).dist < 0.6) { f.alive = false; S.hudNote = 'the snare burns'; L.drawHud(); }   // fire takes roots
+    if (epoch !== ST.shapeEpoch || !self.alive) { self.alive = false; return false; }
+    for (const f of fireLines) if (f.flora && f.alive && nearestOnPath(pts[pts.length >> 1], f.pts, _near).dist < 0.6) { f.alive = false; ST.hudNote = 'the snare burns'; LATE.drawHud(); }   // fire takes roots
     for (let k = 0; k < thinned(5); k++) {
       const i = Math.floor(Math.random() * (pts.length - 1));
       puff('pyro', _cp.copy(pts[i]).lerp(pts[i + 1], Math.random()), 1, 0.7, { up: 1.6 });
@@ -583,7 +583,7 @@ export function fireLine(pts, t) {
     }
     return n < until;
   });
-  S.hudNote = 'fire line';
+  ST.hudNote = 'fire line';
   return { form, until };
 }
 
@@ -592,18 +592,18 @@ export function mirrorLine(pts, t, as = null) {
   const form = as || forms.lumen;
   pts = pts.map(p => p.clone());
   const band = new THREE.Mesh(new THREE.BufferGeometry(), glowMat(new THREE.Color(form === 'shadow' ? 0x6a5a9c : 0xfff1b0), 0.5));
-  const until = t + 8, last = new Map(), epoch = S.shapeEpoch;
+  const until = t + 8, last = new Map(), epoch = ST.shapeEpoch;
   let built = -9;
   addEffect([band], (n) => {
-    if (epoch !== S.shapeEpoch) return false;
-    if (n - built > 0.12) { built = n; band.geometry.dispose(); band.geometry = ribbonGeo(pts, 0.5, L.viewerPos); }
+    if (epoch !== ST.shapeEpoch) return false;
+    if (n - built > 0.12) { built = n; band.geometry.dispose(); band.geometry = ribbonGeo(pts, 0.5, LATE.viewerPos); }
     band.material.opacity = 0.32 * Math.min((until - n) / 1.2, 1) * (0.8 + 0.2 * Math.sin(n * 14));
     if (form !== 'shadow') lightNow(pts[pts.length >> 1], VOLT_LIGHT, 0.5);
     if (Math.random() < 0.5) { const i = Math.floor(Math.random() * (pts.length - 1)); puff('lumen', _cp.copy(pts[i]).lerp(pts[i + 1], Math.random()), 1, 0.3, {}); }
     for (const o of objects) {
       if (o.dead || !o.hostile || nearestOnPath(o.pos, pts, _near).dist > 0.4) continue;
       turn(o); sendBack(o, form === 'prism' ? 14 : 10); tick();
-      S.hudNote = 'mirrored'; S.lastCast = 'lumen'; L.drawHud();
+      ST.hudNote = 'mirrored'; ST.lastCast = 'lumen'; LATE.drawHud();
     }
     for (const e of echoes) {
       if (e.down || n - (last.get(e) || -9) < 2 || nearestOnPath(e.group.position, pts, _near).dist > 0.45) continue;
@@ -613,7 +613,7 @@ export function mirrorLine(pts, t, as = null) {
     }
     return n < until;
   });
-  S.hudNote = form === 'shadow' ? 'veil' : 'mirror line';
+  ST.hudNote = form === 'shadow' ? 'veil' : 'mirror line';
   return { form, until };
 }
 // --- Gravis: a tear that everything near falls toward ---
@@ -623,11 +623,11 @@ export function rift(pts, t) {
   const band = new THREE.Mesh(new THREE.BufferGeometry(), energyMat('gravis', { scale: [6, 6, 6], flow: [0, -1.5, 0], cut: 0.3 }));
   const until = t + 8, last = new Map(), R = 1.1;
   let built = -9, then = t;
-  const epoch = S.shapeEpoch;
+  const epoch = ST.shapeEpoch;
   addEffect([band], (n) => {
-    if (epoch !== S.shapeEpoch) return false;
+    if (epoch !== ST.shapeEpoch) return false;
     const dt = Math.min(n - then, 0.08); then = n;
-    if (n - built > 0.12) { built = n; band.geometry.dispose(); band.geometry = ribbonGeo(pts, 0.16, L.viewerPos); }
+    if (n - built > 0.12) { built = n; band.geometry.dispose(); band.geometry = ribbonGeo(pts, 0.16, LATE.viewerPos); }
     band.material.opacity = Math.min((until - n) / 1.2, 1);
     for (let k = 0; k < thinned(3); k++) {          // motes falling into it (or, floating, rising off it)
       const i = Math.floor(Math.random() * (pts.length - 1));
@@ -654,7 +654,7 @@ export function rift(pts, t) {
     return n < until;
   });
   thump();
-  S.hudNote = form === 'float' ? 'lift' : 'rift';
+  ST.hudNote = form === 'float' ? 'lift' : 'rift';
   return { form, until };
 }
 
@@ -683,11 +683,11 @@ export function plantTurret(point, normal, t) {
   g.scale.setScalar(0.01);
   const self = { g, head, pos: point.clone().addScaledVector(normal, 0.36), until: t + 25, biteAt: 0, spitAt: t + 0.8, snap: -9 };
   turrets.push(self);
-  const epoch = S.shapeEpoch, look = new THREE.Vector3();
+  const epoch = ST.shapeEpoch, look = new THREE.Vector3();
   play(SFX.flora.lift); puff('flora', point, 24, 1.8, { dir: normal, spread: 0.7 });
-  S.hudNote = 'snapper'; S.lastCast = 'flora'; L.drawHud();
+  ST.hudNote = 'snapper'; ST.lastCast = 'flora'; LATE.drawHud();
   addEffect([g], (n) => {
-    if (epoch !== S.shapeEpoch || n > self.until) { turrets.splice(turrets.indexOf(self), 1); puff('flora', self.pos, 20, 1.6, {}); return false; }
+    if (epoch !== ST.shapeEpoch || n > self.until) { turrets.splice(turrets.indexOf(self), 1); puff('flora', self.pos, 20, 1.6, {}); return false; }
     g.scale.setScalar(Math.min((n - t) / 0.4, 1) * 1.4);
     let prey = null, near = 5;
     for (const e of echoes) { if (e.down) continue; const d = e.group.position.distanceTo(self.pos); if (d < near && lineOfSight(self.pos, e.group.position)) { near = d; prey = e; } }
@@ -701,7 +701,7 @@ export function plantTurret(point, normal, t) {
       else if (near >= 1.1 && n > self.spitAt) {
         self.spitAt = n + 1.6; self.snap = n;
         play(SFX.spit);
-        castBolt('flora', { name: 'Thorn', kind: 'bolt', speed: 12, radius: 0.2, shape: 'orb', size: 0.02, bleed: forms.flora === 'thorn', spore: forms.flora === 'spore', life: 1 }, { hand: self.pos.clone().addScaledVector(look, 0.15), dir: look.clone(), eye: L.viewerPos.clone(), fwd: look.clone(), t: n, scale: 1 });
+        castBolt('flora', { name: 'Thorn', kind: 'bolt', speed: 12, radius: 0.2, shape: 'orb', size: 0.02, bleed: forms.flora === 'thorn', spore: forms.flora === 'spore', life: 1 }, { hand: self.pos.clone().addScaledVector(look, 0.15), dir: look.clone(), eye: LATE.viewerPos.clone(), fwd: look.clone(), t: n, scale: 1 });
       }
     }
     for (const o of objects) if (!o.dead && o.hostile && o.pos.distanceTo(self.pos) < 0.7) { o.dead = true; self.snap = n; play(SFX.snap); puff('flora', o.pos, 12, 1.6, {}); }   // it eats what flies past
@@ -713,13 +713,13 @@ export function plantTurret(point, normal, t) {
 export function snare(pts, t) {
   pts = pts.map(p => p.clone());
   const band = new THREE.Mesh(new THREE.BufferGeometry(), energyMat('flora', { scale: [10, 3, 10], flow: [0.4, 0, 0.4], cut: 0.25 }));
-  const until = t + 10, last = new Map(), epoch = S.shapeEpoch;
+  const until = t + 10, last = new Map(), epoch = ST.shapeEpoch;
   let built = -9;
   fireLines.push({ pts, until, flora: true, alive: true });
   const self = fireLines[fireLines.length - 1];
   addEffect([band], (n) => {
-    if (epoch !== S.shapeEpoch || !self.alive) { self.alive = false; return false; }
-    if (n - built > 0.15) { built = n; band.geometry.dispose(); band.geometry = ribbonGeo(pts, 0.22, L.viewerPos); }
+    if (epoch !== ST.shapeEpoch || !self.alive) { self.alive = false; return false; }
+    if (n - built > 0.15) { built = n; band.geometry.dispose(); band.geometry = ribbonGeo(pts, 0.22, LATE.viewerPos); }
     for (const e of echoes) {
       if (e.down || n - (last.get(e) || -9) < 5 || nearestOnPath(e.group.position, pts, _near).dist > 0.5) continue;
       last.set(e, n);
@@ -728,16 +728,16 @@ export function snare(pts, t) {
     if (n >= until) self.alive = false;
     return n < until;
   });
-  S.hudNote = 'snare';
+  ST.hudNote = 'snare';
   return self;
 }
 // --- Astra: every point you mark gets a comet, in the order you drew them ---
 export function constellation(pts, t) {
   pts = pts.filter((p, i) => i % 2 === 0).map(p => p.clone());
   let next = 0;
-  const epoch = S.shapeEpoch;
+  const epoch = ST.shapeEpoch;
   addEffect([], (n) => {
-    if (epoch !== S.shapeEpoch) return false;
+    if (epoch !== ST.shapeEpoch) return false;
     for (const p of pts.slice(next)) if (Math.random() < 0.2) puff('astra', p, 1, 0.2, {});
     while (next < pts.length && n - t > 0.7 + next * 0.22) {
       const at = pts[next++];
@@ -746,18 +746,18 @@ export function constellation(pts, t) {
       let m = { ...MOVES.astra.punch, sky: false };
       if (forms.astra === 'night') m.shadow = true;
       if (forms.astra === 'storm') { m.volt = true; m.rain = true; m.form = 'storm'; }
-      castBolt('astra', m, { hand: at.clone().setY(at.y + 2.2), dir: land.clone().sub(at.clone().setY(at.y + 2.2)).normalize(), eye: L.viewerPos.clone(), fwd: new THREE.Vector3(0, 0, -1), t: n, scale: 1 });
+      castBolt('astra', m, { hand: at.clone().setY(at.y + 2.2), dir: land.clone().sub(at.clone().setY(at.y + 2.2)).normalize(), eye: LATE.viewerPos.clone(), fwd: new THREE.Vector3(0, 0, -1), t: n, scale: 1 });
       play(SFX.astra.punch);
     }
     return next < pts.length;
   });
-  S.hudNote = 'constellation';
+  ST.hudNote = 'constellation';
   return { pts };
 }
 
 // --- Terra: a ridge ---
 export function raiseRidge(pts, t, as = null) {
-  const form = as ? 'rock' : S.terraForm;
+  const form = as ? 'rock' : ST.terraForm;
   // Drop the line onto whatever is under it.
   const ground = [];
   for (const p of pts) {
@@ -765,10 +765,10 @@ export function raiseRidge(pts, t, as = null) {
     const q = new THREE.Vector3(p.x, under ? under.point.y : 0, p.z);
     if (!ground.length || Math.hypot(q.x - ground[ground.length - 1].x, q.z - ground[ground.length - 1].z) > 0.4) ground.push(q);
   }
-  if (ground.length < 2) { S.hudNote = 'draw it along the ground'; return null; }
+  if (ground.length < 2) { ST.hudNote = 'draw it along the ground'; return null; }
   if (form === 'sand') {
     ground.forEach((q, i) => { if (i % 2 === 0) spawnCloud('sand', q.clone().setY(q.y + 0.5), t, 6); });
-    S.hudNote = 'sand screen';
+    ST.hudNote = 'sand screen';
     return { form };
   }
   const height = 0.75, parts = [], groups = [];
@@ -804,9 +804,9 @@ export function raiseRidge(pts, t, as = null) {
   }
   firePulse(ground[ground.length >> 1]);
   thump();
-  const until = t + 20, last = new Map(), epoch = S.shapeEpoch;
+  const until = t + 20, last = new Map(), epoch = ST.shapeEpoch;
   addEffect(groups, (n) => {
-    if (epoch !== S.shapeEpoch) { for (const part of parts) if (part.alive) { part.alive = false; removeBarrier(part.barrier); } return false; }
+    if (epoch !== ST.shapeEpoch) { for (const part of parts) if (part.alive) { part.alive = false; removeBarrier(part.barrier); } return false; }
     const rise = Math.min((n - t) / 0.2, 1);
     let any = false;
     for (const part of parts) {
@@ -821,9 +821,9 @@ export function raiseRidge(pts, t, as = null) {
     }
     return any;
   });
-  S.hudNote = 'ridge';
+  ST.hudNote = 'ridge';
   return { form, parts };
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { _np, _nt, stream, clearShaping, quench, turrets, plantTurret });
+Object.assign(LATE, { _np, _nt, stream, clearShaping, quench, turrets, plantTurret });

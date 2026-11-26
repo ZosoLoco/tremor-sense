@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms, CURL_OPEN } from './data.js?v=14';
-import { play, SFX, tone, castSound } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { formOf } from './core.js?v=14';
-import { scene, UP, camera, renderer } from './renderer.js?v=14';
-import { VOLT_LIGHT, lightNow, FIRE_LIGHT } from './pulse.js?v=14';
-import { echoes, glowMat, isLive, reveal, hit } from './echoes.js?v=14';
-import { segmentDistance } from './creatures.js?v=14';
-import { energyMat, particles, PCOL, puff, earthMat } from './visuals.js?v=14';
-import { addEffect } from './effects.js?v=14';
-import { objects, sendBack, turn } from './objects.js?v=14';
-import { sources } from './water.js?v=14';
+import { ELEMENTS, forms, CURL_OPEN } from './data.js?v=15';
+import { play, SFX, tone, castSound } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { formOf } from './core.js?v=15';
+import { scene, UP, camera, renderer } from './renderer.js?v=15';
+import { VOLT_LIGHT, lightNow, FIRE_LIGHT } from './pulse.js?v=15';
+import { echoes, glowMat, isLive, reveal, hit } from './echoes.js?v=15';
+import { segmentDistance } from './creatures.js?v=15';
+import { energyMat, particles, PCOL, puff, earthMat } from './visuals.js?v=15';
+import { addEffect } from './effects.js?v=15';
+import { objects, sendBack, turn } from './objects.js?v=15';
+import { sources } from './water.js?v=15';
 
 // ---------- hand constructs ----------
 // Lumen's sweep leaves a blade of light in the hand that made it, for ten seconds. Swing it and it cuts; swing it fast
@@ -38,14 +38,14 @@ export function summonBlade(st, t, key = 'lumen') {
   b = { st, g, key, until: t + 12, born: t, tip: new THREE.Vector3(), prev: new THREE.Vector3(), struck: new Map(), first: true, len: key === 'flora' ? 1.3 : key === 'terra' ? 0.8 : 0.95 };
   blades.push(b);
   if (key === 'lumen') play(SFX.blade); else { castSound[key](); tone(300, 900, 0.18, 0.1, 'triangle'); }
-  S.hudNote = WEAPON[key] || 'blade'; S.lastCast = key;
+  ST.hudNote = WEAPON[key] || 'blade'; ST.lastCast = key;
   return b;
 }
 const _bd = new THREE.Vector3();
 export function updateBlades(t, dt) {
   for (let i = blades.length - 1; i >= 0; i--) {
     const b = blades[i], st = b.st;
-    if (t > b.until || S.selected !== b.key) { scene.remove(b.g); b.g.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); blades.splice(i, 1); continue; }
+    if (t > b.until || ST.selected !== b.key) { scene.remove(b.g); b.g.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); blades.splice(i, 1); continue; }
     b.g.visible = !!st.valid;
     if (!st.valid) continue;
     _bd.copy(st.across).negate().normalize();          // out of the thumb side of the fist, the way a sword is held
@@ -68,7 +68,7 @@ export function updateBlades(t, dt) {
         hit(e, b.key, t, _bd, { damage: 2, kind: 'whip', shadow: b.key === 'lumen' && forms.lumen === 'shadow', form: b.key === 'terra' && formOf('terra') !== 'rock' ? formOf('terra') : undefined });
       }
     }
-    for (const o of objects) if (!o.dead && o.hostile && segmentDistance(o.pos, st.palm, b.tip) < 0.3) { turn(o); sendBack(o, 11); tone(2637, 2637, 0.1, 0.1, 'triangle'); S.hudNote = 'parried'; S.lastCast = b.key; L.drawHud(); }
+    for (const o of objects) if (!o.dead && o.hostile && segmentDistance(o.pos, st.palm, b.tip) < 0.3) { turn(o); sendBack(o, 11); tone(2637, 2637, 0.1, 0.1, 'triangle'); ST.hudNote = 'parried'; ST.lastCast = b.key; LATE.drawHud(); }
     b.prev.copy(b.tip);
   }
 }
@@ -76,7 +76,7 @@ export function updateBlades(t, dt) {
 // No colour, no kind, no health. Just the absence.
 export const voids = [];
 export function updateVoids(t) {
-  const on = S.selected === 'umbra';
+  const on = ST.selected === 'umbra';
   echoes.forEach((e, i) => {
     let v = voids[i];
     if (!on || e.down) { if (v) v.visible = false; return; }
@@ -90,7 +90,7 @@ export function updateVoids(t) {
     v.visible = true;
     v.position.copy(e.group.position);
     v.scale.setScalar((e.group.scale.x || 1) * (1 + 0.06 * Math.sin(t * 3 + i)));
-    v.children[1].lookAt(L.viewerPos);
+    v.children[1].lookAt(LATE.viewerPos);
   });
 }
 // Water you have put on a ceiling rains: what stands under it is soaked.
@@ -106,25 +106,25 @@ export function rain(t) {
   }
   for (const sc of sources) {
     if (sc.normal.y > -0.5) continue;
-    if (Math.random() < 0.6) particles.emit(_bd.copy(sc.pos).add(L._np.set((Math.random() - 0.5) * 0.7, 0, (Math.random() - 0.5) * 0.7)), L._nt.set(0, -2.5, 0), PCOL.aqua[1], 0.014, 0.9, 6, 0);
+    if (Math.random() < 0.6) particles.emit(_bd.copy(sc.pos).add(LATE._np.set((Math.random() - 0.5) * 0.7, 0, (Math.random() - 0.5) * 0.7)), LATE._nt.set(0, -2.5, 0), PCOL.aqua[1], 0.014, 0.9, 6, 0);
     if (t - (sc.rainT || 0) < 0.7) continue;
     sc.rainT = t;
     for (const e of echoes) if (!e.down && e.group.position.y < sc.pos.y && Math.hypot(e.group.position.x - sc.pos.x, e.group.position.z - sc.pos.z) < 0.6) { e.soakedUntil = Math.max(e.soakedUntil, t + 4); reveal(e, t, 2, ELEMENTS.aqua.color); }
-    L.quench(sc.pos.clone().setY(0.2), 0.6, t);
+    LATE.quench(sc.pos.clone().setY(0.2), 0.6, t);
   }
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { summonBlade });
+Object.assign(LATE, { summonBlade });
 
 // Umbra's hands. While you are in the dark discipline, each of your hands wears a larger one made of shadow, reaching
 // well past your fingers. Rake an open hand through the air and the claws cut whatever is within their reach.
 const claws = [];
 export function updateClaws(t, dt) {
-  const hands = L.handState ? [L.handState.left, L.handState.right] : [];
+  const hands = LATE.handState ? [LATE.handState.left, LATE.handState.right] : [];
   hands.forEach((st, i) => {
     let cl = claws[i];
-    const on = S.selected === 'umbra' && st.valid && st.curl > 1.25;
+    const on = ST.selected === 'umbra' && st.valid && st.curl > 1.25;
     if (!on) { if (cl) cl.g.visible = false; return; }
     if (!cl) {
       const g = new THREE.Group();
@@ -159,17 +159,17 @@ const arrows = [0, 1, 2, 3].map(() => { const a = new THREE.Mesh(new THREE.ConeG
 const _th = new THREE.Vector3(), _tq = new THREE.Quaternion();
 let warnedAt = -9;
 export function updateThreats(t) {
-  const q = renderer.xr.isPresenting && L.viewerQuat ? L.viewerQuat : camera.quaternion;
+  const q = renderer.xr.isPresenting && LATE.viewerQuat ? LATE.viewerQuat : camera.quaternion;
   _tq.copy(q).invert();
   let n = 0, fresh = false;
   const consider = (pos, urgent) => {
     if (n >= arrows.length) return;
-    _th.copy(pos).sub(L.viewerPos).applyQuaternion(_tq);         // into head space: -z is where you are looking
+    _th.copy(pos).sub(LATE.viewerPos).applyQuaternion(_tq);         // into head space: -z is where you are looking
     const flatLen = Math.hypot(_th.x, _th.y);
     if (_th.z < 0 && flatLen < -_th.z * 0.9) return;           // you can see it
     const a = arrows[n++];
     const dx = flatLen > 0.05 ? _th.x / flatLen : 0, dy = flatLen > 0.05 ? _th.y / flatLen : -1;
-    a.position.set(dx * 0.2, dy * 0.14, -0.6).applyQuaternion(q).add(L.viewerPos);
+    a.position.set(dx * 0.2, dy * 0.14, -0.6).applyQuaternion(q).add(LATE.viewerPos);
     a.quaternion.copy(q).multiply(_tq.clone().setFromAxisAngle(_th.set(0, 0, 1), Math.atan2(dy, dx) - Math.PI / 2));
     _tq.copy(q).invert();
     a.material.opacity = urgent ? 0.6 + 0.4 * Math.sin(t * 20) : 0.55;

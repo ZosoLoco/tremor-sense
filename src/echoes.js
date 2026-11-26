@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { ECHO_COUNT, KINDS, KIND_NAMES, ACID, ELEMENTS } from './data.js?v=14';
-import { blip, tick, hitSound } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { renderer, scene, UP, ZERO, now } from './renderer.js?v=14';
-import { planes } from './room.js?v=14';
-import { clearBarriers, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=14';
+import { ECHO_COUNT, KINDS, KIND_NAMES, ACID, ELEMENTS } from './data.js?v=15';
+import { blip, tick, hitSound } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { renderer, scene, UP, ZERO, now } from './renderer.js?v=15';
+import { planes } from './room.js?v=15';
+import { clearBarriers, collide, nearestRoomSurface, lineOfSight } from './collision.js?v=15';
 
 // ---------- echoes: the hidden things a sense reveals ----------
 export const echoes = [];
 const echoGroup = new THREE.Group();
 scene.add(echoGroup);
-S.downCount = 0;
-S.respawnAt = -1;
+ST.downCount = 0;
+ST.respawnAt = -1;
 
 export function glowMat(color, opacity = 0) {
   return new THREE.MeshBasicMaterial({
@@ -81,7 +81,7 @@ export function roomBounds() {
 
 // Where the player is standing when a round is laid out.
 export function spawnEye() {
-  return renderer.xr.isPresenting ? L.viewerPos.clone() : new THREE.Vector3(0.4, 1.5, 2.2);
+  return renderer.xr.isPresenting ? LATE.viewerPos.clone() : new THREE.Vector3(0.4, 1.5, 2.2);
 }
 const _sa = new THREE.Vector3(), _sb = new THREE.Vector3();
 const SIDE_RAYS = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]].map(v => new THREE.Vector3(...v));
@@ -111,24 +111,24 @@ function openSpot(box, yMin, yMax, radius, eye, others = [], gap = 0) {
 
 // Waves: each one fields one more creature (three to start, eight at most) and they attack a little more often.
 // Clear a wave and the next begins with the room as you left it. Go down and it is back to wave one, room reset.
-S.wave = 1; S.activeCount = 3;
+ST.wave = 1; ST.activeCount = 3;
 export function scatterEchoes(keepWorld = false) {
-  if (!keepWorld) { clearBarriers(); L.clearShaping(); }
+  if (!keepWorld) { clearBarriers(); LATE.clearShaping(); }
   const box = roomBounds();
   const eye = spawnEye(), taken = [];
-  S.activeCount = Math.min(1 + S.wave, 6);          // waves build more slowly and top out lower
+  ST.activeCount = Math.min(1 + ST.wave, 6);          // waves build more slowly and top out lower
   echoes.forEach((e, i) => {
-    if (i >= S.activeCount) {                          // not in this wave: parked out of the way
+    if (i >= ST.activeCount) {                          // not in this wave: parked out of the way
       e.down = true; e.downT = -1; e.group.visible = false; e.home.set(0, -50, 0); e.windup = -1;
       for (const bead of e.tail) bead.visible = false;
       return;
     }
-    e.kind = L.AI.kinds ? KIND_NAMES[(Math.random() * KIND_NAMES.length) | 0] : 'plain';
-    if (KINDS[e.kind].minWave > S.wave) e.kind = 'pebble';
+    e.kind = LATE.AI.kinds ? KIND_NAMES[(Math.random() * KIND_NAMES.length) | 0] : 'plain';
+    if (KINDS[e.kind].minWave > ST.wave) e.kind = 'pebble';
     const KK = KINDS[e.kind];
     e.home.copy(KK.alt ? openSpot(box, Math.min(KK.alt, box.max.y - 0.4), Math.min(KK.alt + 0.25, box.max.y - 0.3), 0.3, eye, taken, 0.7) : openSpot(box, 0.5, 1.7, 0.3, eye, taken, 0.7));
     e.group.scale.setScalar((KK.scale || 1) * 0.8);   // everything a little smaller: easier to read a room full of them
-    L.dressEcho(e);
+    LATE.dressEcho(e);
     taken.push(e.home.clone());
     e.down = false; e.downT = -1; e.revealedUntil = -1; e.level = 0;
     e.hp = KINDS[e.kind].hp; e.restY = e.home.y; e.vel.set(0, 0, 0); e.airborne = false; e.flashT = -1;
@@ -141,16 +141,16 @@ export function scatterEchoes(keepWorld = false) {
     e.group.position.copy(e.home);
     e.group.visible = false;
   });
-  S.downCount = 0;
-  S.draftUntil = -1;
-  S.nextAttackAt = now() + L.CREATURE.firstAttack;
+  ST.downCount = 0;
+  ST.draftUntil = -1;
+  ST.nextAttackAt = now() + LATE.CREATURE.firstAttack;
   if (!keepWorld) {
-    S.playerHP = L.MAX_HP;
-    L.clearSources(); L.water.amount = 0;
-    L.scatterObjects();
-  } else if (L.objects.filter(o => !o.dead && !o.def.cloud && !o.hostile).length < 6) L.scatterObjects();   // running low: restock
-  S.hudNote = `wave ${S.wave}`;
-  L.drawHud();
+    ST.playerHP = LATE.MAX_HP;
+    LATE.clearSources(); LATE.water.amount = 0;
+    LATE.scatterObjects();
+  } else if (LATE.objects.filter(o => !o.dead && !o.def.cloud && !o.hostile).length < 6) LATE.scatterObjects();   // running low: restock
+  ST.hudNote = `wave ${ST.wave}`;
+  LATE.drawHud();
 }
 
 export const isLive = (e, t) => !e.down && e.revealedUntil > t;
@@ -158,7 +158,7 @@ export const isLive = (e, t) => !e.down && e.revealedUntil > t;
 // Mark an echo as sensed. The colour tells you which sense found it.
 export function reveal(e, t, duration, color) {
   if (e.down) return;
-  if (e.revealedUntil < t) { blip(); e.baseColor.copy(L.AI.kinds && e.kind !== 'plain' ? KINDS[e.kind].colour : color); }
+  if (e.revealedUntil < t) { blip(); e.baseColor.copy(LATE.AI.kinds && e.kind !== 'plain' ? KINDS[e.kind].colour : color); }
   e.revealedUntil = Math.max(e.revealedUntil, t + duration);
 }
 
@@ -172,27 +172,27 @@ function defeat(e, elementKey, t, pushDir) {
   e.ice.visible = false;
   e.windup = -1;
   for (const bead of e.tail) bead.visible = false;
-  S.downCount++;
-  L.puff(elementKey, e.group.position, 26, 2.4, pushDir && pushDir.lengthSq() ? { dir: pushDir, spread: 1.1 } : {});
+  ST.downCount++;
+  LATE.puff(elementKey, e.group.position, 26, 2.4, pushDir && pushDir.lengthSq() ? { dir: pushDir, spread: 1.1 } : {});
   hitSound();
-  L.drawHud();
-  if (L.AI.kinds) deathEffect(e, t);
-  if (S.downCount === S.activeCount) { S.respawnAt = t + 3.5; S.hudNote = 'wave clear'; L.drawHud(); }
+  LATE.drawHud();
+  if (LATE.AI.kinds) deathEffect(e, t);
+  if (ST.downCount === ST.activeCount) { ST.respawnAt = t + 3.5; ST.hudNote = 'wave clear'; LATE.drawHud(); }
 }
 // What each kind leaves behind.
 function deathEffect(e, t) {
   const p = e.group.position.clone();
   if (e.kind === 'drip') {
     const under = nearestRoomSurface(p, 3);
-    L.addSource(under ? under.point : p.clone().setY(0), under ? under.normal : UP, t, 20);
-  } else if (e.kind === 'ember') L.explode(p, 'pyro', 0.9, t, 1);
-  else if (e.kind === 'pebble') L.spawnObject('stone', p);
+    LATE.addSource(under ? under.point : p.clone().setY(0), under ? under.normal : UP, t, 20);
+  } else if (e.kind === 'ember') LATE.explode(p, 'pyro', 0.9, t, 1);
+  else if (e.kind === 'pebble') LATE.spawnObject('stone', p);
   else if (e.kind === 'wisp') {
-    L.puff('aero', p, 40, 4, { life: 0.4 });
-    for (const o of L.objects) {
+    LATE.puff('aero', p, 40, 4, { life: 0.4 });
+    for (const o of LATE.objects) {
       if (o.dead || o.held || o.pos.distanceTo(p) > 2) continue;
       const away = o.pos.clone().sub(p).normalize();
-      L.kick(o, away.x * 4, 2, away.z * 4);
+      LATE.kick(o, away.x * 4, 2, away.z * 4);
     }
   }
 }
@@ -242,7 +242,7 @@ export function hit(e, key, t, dir, m = {}) {
     if (m.fear) { e.blindUntil = t + 4; note = note || 'terror'; }
   }
   if (key === 'umbra') {
-    if (m.fear) { e.blindUntil = t + 5; _hd.copy(pos).sub(L.viewerPos).setY(0).normalize(); e.vel.x += _hd.x * 5; e.vel.z += _hd.z * 5; note = note || 'terror'; }
+    if (m.fear) { e.blindUntil = t + 5; _hd.copy(pos).sub(LATE.viewerPos).setY(0).normalize(); e.vel.x += _hd.x * 5; e.vel.z += _hd.z * 5; note = note || 'terror'; }
     else if (!m.hollow) { e.blindUntil = t + 4; e.drainAt = t + 1.5; }
     if (e.exposedUntil > t) { e.exposedUntil = -1; }
   }
@@ -258,7 +258,7 @@ export function hit(e, key, t, dir, m = {}) {
 
   if (key === 'pyro') {
     if (frozen) { e.frozenUntil = -1; e.soakedUntil = t + 4; note = note || 'thaw'; }
-    else if (soaked && !m.volt) { e.soakedUntil = -1; note = 'steam'; L.spawnCloud('steam', pos.clone(), t, 5); }
+    else if (soaked && !m.volt) { e.soakedUntil = -1; note = 'steam'; LATE.spawnCloud('steam', pos.clone(), t, 5); }
     else if (!m.volt && !m.noBurn) e.burnAt = t + 1.5;
   } else if (key === 'aqua') {
     e.burnAt = -1;                                  // water puts fire out
@@ -283,19 +283,19 @@ export function hit(e, key, t, dir, m = {}) {
   if (m.form === 'lightning' && !m.arc) {           // jumps to the nearest other creature
     let near = null, nearDist = 2.4;
     for (const o of echoes) { if (o === e || o.down) continue; const dd = o.group.position.distanceTo(pos); if (dd < nearDist) { nearDist = dd; near = o; } }
-    if (near) { L.zap(pos.clone(), near.group.position.clone(), t); hit(near, 'pyro', t, near.group.position.clone().sub(pos).normalize(), { damage: 1, volt: true, arc: true }); _hp.copy(e.group.position); }
+    if (near) { LATE.zap(pos.clone(), near.group.position.clone(), t); hit(near, 'pyro', t, near.group.position.clone().sub(pos).normalize(), { damage: 1, volt: true, arc: true }); _hp.copy(e.group.position); }
   }
-  if (m.form === 'blast' && m.kind && m.kind !== 'bolt') L.explode(e.group.position.clone(), 'pyro', 0.7, t, 1, true);
-  if (note) { S.hudNote = note; L.drawHud(); }
-  if (e.hp > 0 && m.blood) L.puff('morph', pos, 20, 2.5, { up: 1 });
-  if (e.hp <= 0 && key === 'necro') L.raiseThrall(pos.clone(), t);        // what Necro kills gets back up, on your side
-  if (e.hp <= 0 && ((key === 'umbra' && m.hollow) || key === 'morph') && S.playerHP < 5) { S.playerHP++; S.hudNote = 'fed'; L.drawHud(); }   // the body, and the hollow dark, take back what they kill
-  if (e.hp > 0) { e.flashT = t; tick(); L.puff(key, pos, 8, 1.6); return; }
+  if (m.form === 'blast' && m.kind && m.kind !== 'bolt') LATE.explode(e.group.position.clone(), 'pyro', 0.7, t, 1, true);
+  if (note) { ST.hudNote = note; LATE.drawHud(); }
+  if (e.hp > 0 && m.blood) LATE.puff('morph', pos, 20, 2.5, { up: 1 });
+  if (e.hp <= 0 && key === 'necro') LATE.raiseThrall(pos.clone(), t);        // what Necro kills gets back up, on your side
+  if (e.hp <= 0 && ((key === 'umbra' && m.hollow) || key === 'morph') && ST.playerHP < 5) { ST.playerHP++; ST.hudNote = 'fed'; LATE.drawHud(); }   // the body, and the hollow dark, take back what they kill
+  if (e.hp > 0) { e.flashT = t; tick(); LATE.puff(key, pos, 8, 1.6); return; }
 
   const centre = pos.clone(), away = _hd.clone();
   defeat(e, key, t, away);
   if (shatter) {                                    // the ice goes everywhere and cuts what is close
-    L.puff('aqua', centre, 46, 3.6, { grav: 5, life: 0.8, size: 0.04 });
+    LATE.puff('aqua', centre, 46, 3.6, { grav: 5, life: 0.8, size: 0.04 });
     for (const o of echoes) {
       if (o === e || !isLive(o, t) || o.group.position.distanceTo(centre) > 1.1) continue;
       hit(o, 'terra', t, o.group.position.clone().sub(centre).normalize(), { damage: 1 });

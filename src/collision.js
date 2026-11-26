@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { S, L } from './state.js?v=14';
-import { renderer, now } from './renderer.js?v=14';
-import { previewGroup, fallbackFloor, planes, meshes } from './room.js?v=14';
+import { ST, LATE } from './state.js?v=15';
+import { renderer, now } from './renderer.js?v=15';
+import { previewGroup, fallbackFloor, planes, meshes } from './room.js?v=15';
 
 // ---------- collision with the room ----------
 // Planes are cheap to test, so they are the colliders whenever the headset provides them.
@@ -11,12 +11,12 @@ const colliderList = [];
 //   struck(dir, key, t): called when one of your own moves hits it.  damage(t): called when something hostile does.
 export const barriers = [];
 const barrierMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
-S.barrierKey = null;                             // the discipline raising whatever is being raised right now
+ST.barrierKey = null;                             // the discipline raising whatever is being raised right now
 export function addBarrier(geometry, like, handlers) {
   const collider = new THREE.Mesh(geometry, barrierMat);
   collider.position.copy(like.position); collider.quaternion.copy(like.quaternion);
   collider.updateMatrixWorld(true);
-  const b = { collider, alive: true, hp: 3, like, key: S.barrierKey, ...handlers };
+  const b = { collider, alive: true, hp: 3, like, key: ST.barrierKey, ...handlers };
   collider.userData.barrier = b;
   barriers.push(b);
   return b;

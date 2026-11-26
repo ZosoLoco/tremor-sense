@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { PULSE_SPEED, PULSE_LIFE, KINDS, REVEAL_TIME, ACID, ELEMENTS } from './data.js?v=14';
-import { play, SFX, tone, thump } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene, UP, ZERO } from './renderer.js?v=14';
-import { pulseUniforms } from './pulse.js?v=14';
-import { collide, lineOfSight } from './collision.js?v=14';
-import { echoes, ICE, STEEL_TINT, roomBounds, isOpen, scatterEchoes, isLive, reveal, hit } from './echoes.js?v=14';
+import { PULSE_SPEED, PULSE_LIFE, KINDS, REVEAL_TIME, ACID, ELEMENTS } from './data.js?v=15';
+import { play, SFX, tone, thump } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene, UP, ZERO } from './renderer.js?v=15';
+import { pulseUniforms } from './pulse.js?v=15';
+import { collide, lineOfSight } from './collision.js?v=15';
+import { echoes, ICE, STEEL_TINT, roomBounds, isOpen, scatterEchoes, isLive, reveal, hit } from './echoes.js?v=15';
 
 // ---------- creature behaviour ----------
 // They drift around the room out of sight, and every few seconds one of them stops, swells, and spits a shard at you.
@@ -14,7 +14,7 @@ export const CREATURE = { speed: 0.7, firstAttack: 7, attackEvery: 4.2, windup: 
 export const AI = { on: true, attacks: true, kinds: true };   // attacks off = calm mode; kinds off = every creature the same
 export const HOSTILE = new THREE.Color(0xff2bd6);
 export const MAX_HP = 5;
-S.playerHP = MAX_HP; let hurtT = -9; S.nextAttackAt = 0;
+ST.playerHP = MAX_HP; let hurtT = -9; ST.nextAttackAt = 0;
 
 function pickGoal(e, t) {
   const box = roomBounds();
@@ -36,7 +36,7 @@ function creatureAI(e, t, dt, eye) {
     else {
       _cdir.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(0.3);
       _cprobe.copy(e.home).add(_cdir);
-      L.particles.emit(_cprobe, _cdir.multiplyScalar(-3), HOSTILE, 0.02, 0.1, 0, 0);
+      LATE.particles.emit(_cprobe, _cdir.multiplyScalar(-3), HOSTILE, 0.02, 0.1, 0, 0);
     }
     return;
   }
@@ -53,20 +53,20 @@ function creatureAI(e, t, dt, eye) {
 }
 export function spit(e, eye, t) {
   const dir = eye.clone().sub(e.home).normalize();
-  const o = L.spawnObject('shard', e.home.clone().addScaledVector(dir, 0.3));
+  const o = LATE.spawnObject('shard', e.home.clone().addScaledVector(dir, 0.3));
   o.hostile = true; o.owner = e; o.born = t;
   const K = KINDS[e.kind] || KINDS.plain;
   o.heavy = !!K.heavy;
-  o.vel.copy(dir).multiplyScalar(K.shot * (1 + 0.05 * (S.wave - 1)));
+  o.vel.copy(dir).multiplyScalar(K.shot * (1 + 0.05 * (ST.wave - 1)));
   tone(700, 240, 0.25, 0.14, 'sawtooth');
 }
 // Each frame: choose who attacks next.
 function directAttacks(t, eye) {
-  if (!AI.on || !AI.attacks || t < S.nextAttackAt) return;
-  if (L.objects.filter(o => o.hostile && !o.dead).length >= (S.wave >= 4 ? 3 : CREATURE.maxShots)) return;
+  if (!AI.on || !AI.attacks || t < ST.nextAttackAt) return;
+  if (LATE.objects.filter(o => o.hostile && !o.dead).length >= (ST.wave >= 4 ? 3 : CREATURE.maxShots)) return;
   const able = echoes.filter(e => !e.down && e.windup < 0 && !(e.frozenUntil > t) && !(e.blindUntil > t) && !e.airborne && !e.puppet
     && e.home.distanceTo(eye) < CREATURE.sight && lineOfSight(e.home, eye));
-  S.nextAttackAt = t + Math.max(CREATURE.attackEvery - 0.3 * (S.wave - 1), 2) * (0.7 + Math.random() * 0.6);
+  ST.nextAttackAt = t + Math.max(CREATURE.attackEvery - 0.3 * (ST.wave - 1), 2) * (0.7 + Math.random() * 0.6);
   if (!able.length) return;
   const e = able[(Math.random() * able.length) | 0];
   e.windup = t + CREATURE.windup;
@@ -74,13 +74,13 @@ function directAttacks(t, eye) {
 }
 export function playerHurt(t) {
   if (t - hurtT < 0.6) return;
-  if (L.guard.on || t < S.armourUntil) { hurtT = t; play(SFX.guardHit); S.hudNote = L.guard.on ? 'guarded' : 'armour held'; L.drawHud(); return; }
+  if (LATE.guard.on || t < ST.armourUntil) { hurtT = t; play(SFX.guardHit); ST.hudNote = LATE.guard.on ? 'guarded' : 'armour held'; LATE.drawHud(); return; }
   hurtT = t;
-  S.playerHP--;
+  ST.playerHP--;
   tone(110, 50, 0.4, 0.5, 'square');
-  S.hudNote = S.playerHP > 0 ? 'you were hit' : 'down. new round';
-  if (S.playerHP <= 0) S.respawnAt = t + 1.8;
-  L.drawHud();
+  ST.hudNote = ST.playerHP > 0 ? 'you were hit' : 'down. new round';
+  if (ST.playerHP <= 0) ST.respawnAt = t + 1.8;
+  LATE.drawHud();
 }
 // A red flash around your head when something lands.
 const hurtShell = new THREE.Mesh(new THREE.SphereGeometry(0.45, 20, 14), new THREE.MeshBasicMaterial({
@@ -101,7 +101,7 @@ function moveEcho(e, t, dt) {
     if (collide(e.home, _next)) {
       const fast = Math.hypot(e.vel.x, e.vel.z) > 2.5;
       e.vel.x = e.vel.z = 0;
-      if (fast) { S.hudNote = 'wall slam'; hit(e, 'terra', t, ZERO, { damage: 1 }); }    // thrown into the room itself
+      if (fast) { ST.hudNote = 'wall slam'; hit(e, 'terra', t, ZERO, { damage: 1 }); }    // thrown into the room itself
     }
     else {
       e.home.x += e.vel.x * dt; e.home.z += e.vel.z * dt;
@@ -137,15 +137,15 @@ export function updateEchoes(t, dt, viewerPos) {
     if (e.down) continue;
     if (e.burnAt > 0 && t >= e.burnAt) { e.burnAt = -1; hit(e, 'pyro', t, UP, { damage: 1, noBurn: true }); if (e.down) continue; }
     if (e.drainAt > 0 && t >= e.drainAt) { e.drainAt = e.venom > 0 ? (e.venom--, t + 1.2) : -1; hit(e, 'aero', t, ZERO, { damage: 1, kind: 'void' }); if (e.down) continue; }
-    if (e.dropAt > 0 && t >= e.dropAt) { e.dropAt = -1; thump(); L.puff('gravis', e.group.position, 20, 2.5, {}); hit(e, 'gravis', t, UP, { damage: 2, kind: 'void' }); if (e.down) continue; }
+    if (e.dropAt > 0 && t >= e.dropAt) { e.dropAt = -1; thump(); LATE.puff('gravis', e.group.position, 20, 2.5, {}); hit(e, 'gravis', t, UP, { damage: 2, kind: 'void' }); if (e.down) continue; }
     if (e.seedAt > 0 && t >= e.seedAt) {             // the seed comes up: it and everything beside it are rooted
       e.seedAt = -1;
       const at = e.group.position.clone();
-      L.puff('flora', at, 40, 2.4, { up: 1.5 });
+      LATE.puff('flora', at, 40, 2.4, { up: 1.5 });
       for (const o of echoes) if (!o.down && o.group.position.distanceTo(at) < 1.4) hit(o, 'flora', t, UP, { damage: 1 });
       if (e.down) continue;
     }
-    if (e.rootedUntil > t && Math.random() < 0.3) L.puff('flora', e.group.position, 1, 0.4, { up: 0.5 });
+    if (e.rootedUntil > t && Math.random() < 0.3) LATE.puff('flora', e.group.position, 1, 0.4, { up: 0.5 });
     if (AI.on) creatureAI(e, t, dt, viewerPos);
     moveEcho(e, t, dt);
     e.moving = dt > 0 ? e.home.distanceTo(e.last) / dt : 0;
@@ -161,8 +161,8 @@ export function updateEchoes(t, dt, viewerPos) {
     e.shell.scale.setScalar(e.hp < 2 ? 0.7 : 1);                // cracked down to its core
     e.core.scale.setScalar(t - e.flashT < 0.15 ? 2.2 : 1);
     if (e.group.visible) {
-      if (burning && Math.random() < 0.7) L.puff('pyro', e.group.position, 1, 0.5, { up: 1.2, jitter: 0.08 });
-      if (soaked && !frozen && Math.random() < 0.3) L.puff('aqua', e.group.position, 1, 0.25, { jitter: 0.1 });
+      if (burning && Math.random() < 0.7) LATE.puff('pyro', e.group.position, 1, 0.5, { up: 1.2, jitter: 0.08 });
+      if (soaked && !frozen && Math.random() < 0.3) LATE.puff('aqua', e.group.position, 1, 0.25, { jitter: 0.1 });
     }
     const target = e.revealedUntil > t ? 1 : 0;
     e.level += (target - e.level) * Math.min(dt * 5, 1);
@@ -195,10 +195,10 @@ export function updateEchoes(t, dt, viewerPos) {
   directAttacks(t, viewerPos);
   hurtShell.position.copy(viewerPos);
   hurtShell.material.opacity = Math.max(0.55 * (1 - (t - hurtT) / 0.5), 0);
-  if (S.respawnAt > 0 && t > S.respawnAt) {
-    S.respawnAt = -1;
-    if (S.playerHP <= 0) { S.wave = 1; scatterEchoes(); }           // down: start over
-    else { S.wave++; scatterEchoes(true); }                         // cleared: next wave, same room
+  if (ST.respawnAt > 0 && t > ST.respawnAt) {
+    ST.respawnAt = -1;
+    if (ST.playerHP <= 0) { ST.wave = 1; scatterEchoes(); }           // down: start over
+    else { ST.wave++; scatterEchoes(true); }                         // cleared: next wave, same room
   }
 }
 
@@ -230,4 +230,4 @@ export function flat(v, fallback) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { CREATURE, AI, MAX_HP });
+Object.assign(LATE, { CREATURE, AI, MAX_HP });

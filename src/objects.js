@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { ELEMENTS, forms } from './data.js?v=14';
-import { tone, thump, tick, thud } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene, UP, ZERO } from './renderer.js?v=14';
-import { FIRE_LIGHT, LAVA_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=14';
-import { collide, nearestRoomSurface } from './collision.js?v=14';
-import { echoes, glowMat, roomBounds, spawnEye, isOpen, isLive, reveal, hit } from './echoes.js?v=14';
-import { HOSTILE, playerHurt, segmentDistance } from './creatures.js?v=14';
-import { waterMat, energyMat, stoneMat, craggy, particles, SMOKE, STEAM, DUST, SAND, thinned, fume, PCOL, puff } from './visuals.js?v=14';
-import { addEffect } from './effects.js?v=14';
+import { ELEMENTS, forms } from './data.js?v=15';
+import { tone, thump, tick, thud } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene, UP, ZERO } from './renderer.js?v=15';
+import { FIRE_LIGHT, LAVA_LIGHT, addLight, lightNow, firePulse } from './pulse.js?v=15';
+import { collide, nearestRoomSurface } from './collision.js?v=15';
+import { echoes, glowMat, roomBounds, spawnEye, isOpen, isLive, reveal, hit } from './echoes.js?v=15';
+import { HOSTILE, playerHurt, segmentDistance } from './creatures.js?v=15';
+import { waterMat, energyMat, stoneMat, craggy, particles, SMOKE, STEAM, DUST, SAND, thinned, fume, PCOL, puff } from './visuals.js?v=15';
+import { addEffect } from './effects.js?v=15';
 
 // ---------- objects: loose things in the room ----------
 // Simple bodies: a sphere each for collision, gravity, bounce off the real room.
@@ -78,7 +78,7 @@ function destroyObject(o, t) {
   if (o.def.water) {                                // it spills, and what it spills on stays wet
     puff('aqua', o.pos, 60, 3, { up: 2 });
     const under = nearestRoomSurface(o.pos, 2.5);
-    L.addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t);
+    LATE.addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t);
   }
 }
 export function scatterObjects() {
@@ -113,37 +113,37 @@ export function spawnCloud(kind, pos, t, life = 9) {
 }
 // Phase changes of water.
 function freezeSource(src, t) {
-  const i = L.sources.indexOf(src);
+  const i = LATE.sources.indexOf(src);
   if (i < 0) return;
-  L.sources.splice(i, 1); scene.remove(src.mesh); src.mesh.geometry.dispose(); src.mesh.material.dispose();
+  LATE.sources.splice(i, 1); scene.remove(src.mesh); src.mesh.geometry.dispose(); src.mesh.material.dispose();
   for (let k = 0; k < 2; k++) spawnObject('ice', src.pos.clone().addScaledVector(src.normal, 0.2).add(new THREE.Vector3((k - 0.5) * 0.3, 0, (Math.random() - 0.5) * 0.2)));
   puff('aqua', src.pos, 30, 1.6, { dir: src.normal, spread: 0.9 });
   tone(1900, 2600, 0.2, 0.08, 'triangle');
-  S.hudNote = 'water to ice'; L.drawHud();
+  ST.hudNote = 'water to ice'; LATE.drawHud();
 }
 function evaporate(src, t) {
-  const i = L.sources.indexOf(src);
+  const i = LATE.sources.indexOf(src);
   if (i < 0) return;
-  L.sources.splice(i, 1); scene.remove(src.mesh); src.mesh.geometry.dispose(); src.mesh.material.dispose();
+  LATE.sources.splice(i, 1); scene.remove(src.mesh); src.mesh.geometry.dispose(); src.mesh.material.dispose();
   spawnCloud('steam', src.pos.clone().addScaledVector(src.normal, 0.55), t);
   tone(1400, 400, 0.6, 0.06, 'sawtooth');
-  S.hudNote = 'water to steam'; L.drawHud();
+  ST.hudNote = 'water to steam'; LATE.drawHud();
 }
 // Fire reaching a place: boils any water standing there.
 function heatAt(point, radius, t) {
-  for (const src of [...L.sources]) if (src.pos.distanceTo(point) < radius) evaporate(src, t);
+  for (const src of [...LATE.sources]) if (src.pos.distanceTo(point) < radius) evaporate(src, t);
 }
 export function ignite(o, t) {
   if (o.dead) return;
   if (o.def.ice) {                                  // ice melts back to standing water
     o.dead = true;
     const under = nearestRoomSurface(o.pos, 2.5);
-    L.addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t, 20);
-    S.hudNote = 'ice to water'; L.drawHud();
+    LATE.addSource(under ? under.point : o.pos.clone().setY(0), under ? under.normal : UP, t, 20);
+    ST.hudNote = 'ice to water'; LATE.drawHud();
     return;
   }
   if (o.def.earth && !o.def.cloud && o.kind !== 'shard') {                // stone and steel take the heat and keep it
-    if (!(o.heat > t)) { S.hudNote = o.kind === 'ball' || o.kind === 'anvil' ? 'red hot' : 'molten'; L.drawHud(); }
+    if (!(o.heat > t)) { ST.hudNote = o.kind === 'ball' || o.kind === 'anvil' ? 'red hot' : 'molten'; LATE.drawHud(); }
     o.heat = t + HEAT_TIME;
     return;
   }
@@ -169,8 +169,8 @@ function splash(point, t, radius) {
   puff('aqua', centre, 90, radius * 3.5, { up: 2.5 });
   thump();
   const under = nearestRoomSurface(centre, 2.5);
-  L.addSource(under ? under.point : centre.clone().setY(0), under ? under.normal : UP, t, 25);
-  L.quench(centre, radius, t);
+  LATE.addSource(under ? under.point : centre.clone().setY(0), under ? under.normal : UP, t, 25);
+  LATE.quench(centre, radius, t);
   for (const e of echoes) if (isLive(e, t) && e.group.position.distanceTo(centre) < radius) hit(e, 'aqua', t, e.group.position.clone().sub(centre).normalize(), { damage: 1, kind: 'wall' });
   for (const o of objects) {
     if (o.dead || o.held || o.def.cloud || o.pos.distanceTo(centre) > radius * 1.2) continue;
@@ -196,8 +196,8 @@ export function implode(point, radius, t, dmg = 1, key = 'gravis') {
   ball.position.copy(centre);
   thump(); tone(60, 220, 0.4, 0.4, 'sine');
   for (let i = 0; i < thinned(40); i++) {           // motes falling inward
-    L._np.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(radius);
-    particles.emit(L._nt.copy(centre).add(L._np), L._np.multiplyScalar(-3), PCOL.gravis[i % 3], 0.022, 0.32, 0, 0);
+    LATE._np.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(radius);
+    particles.emit(LATE._nt.copy(centre).add(LATE._np), LATE._np.multiplyScalar(-3), PCOL.gravis[i % 3], 0.022, 0.32, 0, 0);
   }
   addEffect([ball], (n) => {
     const k = (n - t) / 0.35;
@@ -259,7 +259,7 @@ export function crushObject(o, t) {
   addEffect([shell], (n) => { const k = (n - t) / 0.18; shell.scale.setScalar(Math.max(0.45 * (1 - k), 0.02)); shell.rotation.y += 0.4; return k < 1; });
   if (o.def.explodes) { o.dead = true; explode(p, 'pyro', 1.7, t, 2); return; }
   destroyObject(o, t);
-  if (o.kind === 'stone' || o.kind === 'boulder') { spawnCloud('sand', p, t, o.kind === 'boulder' ? 12 : 8); S.hudNote = 'stone to sand'; }
+  if (o.kind === 'stone' || o.kind === 'boulder') { spawnCloud('sand', p, t, o.kind === 'boulder' ? 12 : 8); ST.hudNote = 'stone to sand'; }
   const heavy = o.def.mass >= 2;
   for (const e of echoes) {                                // the pieces go everywhere
     if (isLive(e, t) && e.group.position.distanceTo(p) < 1.2) hit(e, heavy ? 'terra' : 'aero', t, e.group.position.clone().sub(p).normalize(), { damage: heavy ? 2 : 1 });
@@ -284,7 +284,7 @@ export function updateObjects(t, dt) {
       for (const e of echoes) {
         if (e.down || e.home.distanceTo(o.pos) > r + 0.15) continue;
         if (o.kind === 'sand') { e.blindUntil = t + 0.7; reveal(e, t, 1.2, SAND); }
-        else if (t - (e.scaldT || -9) > 0.9) { e.scaldT = t; reveal(e, t, 2, STEAM); S.hudNote = 'scald'; hit(e, 'pyro', t, ZERO, { damage: 1, noBurn: true }); }
+        else if (t - (e.scaldT || -9) > 0.9) { e.scaldT = t; reveal(e, t, 2, STEAM); ST.hudNote = 'scald'; hit(e, 'pyro', t, ZERO, { damage: 1, noBurn: true }); }
       }
       o.mesh.position.copy(o.pos);
       continue;
@@ -319,13 +319,13 @@ export function updateObjects(t, dt) {
           turn(o);
           o.pos.copy(wall.point).addScaledVector(wall.normal, 0.12);
           sendBack(o, 8);
-          tone(1800, 1200, 0.2, 0.15, 'triangle'); S.hudNote = 'rang off steel'; L.drawHud();
+          tone(1800, 1200, 0.2, 0.15, 'triangle'); ST.hudNote = 'rang off steel'; LATE.drawHud();
           continue;
         }
         if (hitB) { hitB.damage(t); if (o.heavy) hitB.damage(t); }
         o.dead = true; tick();
         for (let k = 0; k < 14; k++) particles.emit(o.pos, _od.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(3), HOSTILE, 0.03, 0.3, 4, 1);
-      } else if (o.pos.distanceTo(L.viewerPos) < 0.3) { o.dead = true; playerHurt(t); }
+      } else if (o.pos.distanceTo(LATE.viewerPos) < 0.3) { o.dead = true; playerHurt(t); }
       continue;
     }
     if (!o.rest) {
@@ -421,4 +421,4 @@ export function updateObjects(t, dt) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { objects, spawnObject, destroyObject, scatterObjects, spawnCloud, freezeSource, evaporate, heatAt, ignite, kick, sendBack, turn, splash, quake, implode, explode });
+Object.assign(LATE, { objects, spawnObject, destroyObject, scatterObjects, spawnCloud, freezeSource, evaporate, heatAt, ignite, kick, sendBack, turn, splash, quake, implode, explode });

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { FORM_LOOK } from './data.js?v=14';
-import { S, L } from './state.js?v=14';
-import { scene } from './renderer.js?v=14';
-import { pulseUniforms } from './pulse.js?v=14';
+import { FORM_LOOK } from './data.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { scene } from './renderer.js?v=15';
+import { pulseUniforms } from './pulse.js?v=15';
 
 // ---------- visual kit: what each discipline is made of ----------
 // Pyro, Aqua and Aero are flowing noise in their own colours. Terra is solid, faceted stone.
@@ -240,15 +240,15 @@ export const smoke = makePool(600, false);
 export const SMOKE = new THREE.Color(0x26221f), STEAM = new THREE.Color(0xe6ecee), DUST = new THREE.Color(0x9c8763), SAND = new THREE.Color(0xc9ad74);
 export const _fv = new THREE.Vector3(), _fp = new THREE.Vector3();
 // How much loose matter to draw: 1 is everything. Drops when frames run long, climbs back when they do not.
-S.detail = 1; let frameAvg = 0.012, detailCheck = 0;
+ST.detail = 1; let frameAvg = 0.012, detailCheck = 0;
 export function tuneDetail(t, dt) {
   frameAvg += (dt - frameAvg) * 0.05;
   if (t - detailCheck < 1) return;
   detailCheck = t;
-  if (frameAvg > 0.0165) S.detail = Math.max(0.35, S.detail - 0.15);
-  else if (frameAvg < 0.0145) S.detail = Math.min(1, S.detail + 0.05);
+  if (frameAvg > 0.0165) ST.detail = Math.max(0.35, ST.detail - 0.15);
+  else if (frameAvg < 0.0145) ST.detail = Math.min(1, ST.detail + 0.05);
 }
-export const thinned = (n) => { const k = n * S.detail; return Math.floor(k) + (Math.random() < k % 1 ? 1 : 0); };
+export const thinned = (n) => { const k = n * ST.detail; return Math.floor(k) + (Math.random() < k % 1 ? 1 : 0); };
 // Soft puffs: smoke off a fire, dust off broken stone, steam, sand.
 export function fume(color, point, n, o = {}) {
   n = thinned(n);
@@ -310,4 +310,4 @@ export function puff(key, point, n, speed, o = {}) {
 }
 
 // Reached from modules that load before this one.
-Object.assign(L, { particles, puff });
+Object.assign(LATE, { particles, puff });

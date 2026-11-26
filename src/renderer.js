@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { S, L } from './state.js?v=14';
+import { ST, LATE } from './state.js?v=15';
 
 // ---------- renderer ----------
 export const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -24,5 +24,5 @@ window.addEventListener('resize', () => {
 
 export const UP = new THREE.Vector3(0, 1, 0);
 export const ZERO = new THREE.Vector3();
-export const now = () => L.pulseUniforms.uTime.value;
+export const now = () => LATE.pulseUniforms.uTime.value;
 

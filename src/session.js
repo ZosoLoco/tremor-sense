@@ -1,19 +1,19 @@
-import { ensureAudio } from './audio.js?v=14';
-import { S, L } from './state.js?v=14';
-import { statusEl, hintEl, enterBtn, uiEl } from './core.js?v=14';
-import { renderer, scene, PREVIEW_BG } from './renderer.js?v=14';
-import { pulseUniforms } from './pulse.js?v=14';
-import { previewGroup, fallbackFloor, clearRoom } from './room.js?v=14';
-import { scatterEchoes } from './echoes.js?v=14';
-import { menuGroup, readout } from './selection.js?v=14';
-import { hud, drawHud } from './hud.js?v=14';
-import { newHand, handState, onSelectStart, onSqueezeStart } from './hands.js?v=14';
+import { ensureAudio } from './audio.js?v=15';
+import { ST, LATE } from './state.js?v=15';
+import { statusEl, hintEl, enterBtn, uiEl } from './core.js?v=15';
+import { renderer, scene, PREVIEW_BG } from './renderer.js?v=15';
+import { pulseUniforms } from './pulse.js?v=15';
+import { previewGroup, fallbackFloor, clearRoom } from './room.js?v=15';
+import { scatterEchoes } from './echoes.js?v=15';
+import { menuGroup, readout } from './selection.js?v=15';
+import { hud, drawHud } from './hud.js?v=15';
+import { newHand, handState, onSelectStart, onSqueezeStart } from './hands.js?v=15';
 
 // ---------- session ----------
-S.xrSupported = false;
-S.sessionStart = 0;
-S.askedForRoom = false;
-S.placed = false;
+ST.xrSupported = false;
+ST.sessionStart = 0;
+ST.askedForRoom = false;
+ST.placed = false;
 
 async function enterXR() {
   ensureAudio();
@@ -35,10 +35,10 @@ async function enterXR() {
     pulseUniforms.uBase.value = 0;
     uiEl.style.display = 'none';
     hud.visible = true;
-    S.sawHands = false; S.askedForRoom = false; S.placed = false; S.previewHold = null;
+    ST.sawHands = false; ST.askedForRoom = false; ST.placed = false; ST.previewHold = null;
     handState.left = newHand(); handState.right = newHand();
-    S.hudNote = 'show your hands';
-    S.sessionStart = performance.now() / 1000;
+    ST.hudNote = 'show your hands';
+    ST.sessionStart = performance.now() / 1000;
     for (const v of pulseUniforms.uPulses.value) v.w = -999;
     drawHud();
   } catch (err) {
@@ -63,7 +63,7 @@ function onSessionEnd() {
 
 if (navigator.xr && navigator.xr.isSessionSupported) {
   navigator.xr.isSessionSupported('immersive-ar').then((ok) => {
-    S.xrSupported = ok;
+    ST.xrSupported = ok;
     if (ok) {
       enterBtn.disabled = false;
       statusEl.textContent = 'Headset ready.';
